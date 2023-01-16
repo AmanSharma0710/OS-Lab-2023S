@@ -1,1 +1,1 @@
-answer=1;rev<$1|while read line;do [ -z $line ]&&echo "$answer"&&exit;x=$answer;y=$line;while [ $y -gt 0 ];do t=$x;x=$y;y=$((t%y));done;answer=$((answer*(line/x)));done
+answer=1;for line in $(rev<$1);do x=$answer;y=$line;while [ $y -gt 0 ];do t=$x;x=$y;y=$((t%y));done;answer=$((answer*(line/x)));echo $answer;done|tail -1
