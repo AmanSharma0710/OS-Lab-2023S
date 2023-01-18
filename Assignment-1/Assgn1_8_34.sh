@@ -48,20 +48,20 @@ do
     case "${i}" in
         c)
            echo "$header"
-           while IFS="," read -r col1 col2 col3 col4
+           while IFS="," read -r j k l m
            do
-                if [ "$c" = "$col2" ]; then
+                if [ "$c" = "$k" ]; then
                     
-                    let p=$p+$col3
+                    let p=$p+$l
                 fi
            done < <(tail -n +2 $w)                           
            echo $p
            ;;
         n) 
-           while IFS="," read -r col1 col2 col3 col4
+           while IFS="," read -r j k l m 
            do
-                if [ "$n" = "$col4" ]; then
-                    let q=$q+$col3
+                if [ "$n" = "$m" ]; then
+                    let q=$q+$l
                 fi
            done < <(tail -n +2 $w)                            
            echo $q
