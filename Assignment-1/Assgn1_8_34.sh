@@ -1,86 +1,88 @@
-declare -a flags                                         # array to store flags in order
-count=0
-while getopts c:n:s:h flag                               # getopts to get flags, : indicates that the flag takes an argument
+w=main.csv
+t=t.csv
+v=Date,Category,Amount,Name
+
+
+while getopts c:n:s:h z                               
 do 
-    case "${flag}" in
-        c) category=${OPTARG}
-           flags[$count]=${flag}
-           let count++
+    case "${z}" in
+        c) c=${OPTARG}
+           
+           f[$y]=$z 
+           let y++
            ;;
-        n) name=${OPTARG}
-              flags[$count]=${flag}
-              let count++
+        n) n=${OPTARG}
+            f[$y]=$z 
+           let y++
            ;;
-        s) sortcol=${OPTARG}
-                flags[$count]=${flag}
-                let count++
-            ;;
-        h) flags[$count]=${flag}
-              let count++
+        s) s=${OPTARG}
+            f[$y]=$z 
+           let y++
+           ;;
+        h)  f[$y]=$z 
+           let y++
            ;;
     esac
 done
-shift "$((OPTIND-1))"                                   # shift to get the arguments
+shift "$((OPTIND-1))"                                   
 
 if [ "$#" -ne 4 ]; then
-    echo "Illegal number of parameters."
     exit 1
 fi
 
-if [ ! -f main.csv ]; then                             # if file doesn't exist, create it
-    touch main.csv
+if [ ! -f $w ]; then                             
+    touch $w
 fi
 
-if [ ! -s main.csv ]; then                             # if file is empty, add header
-    echo "Date,Category,Amount,Name" > main.csv
+if [ ! -s $w ]; then                             
+    echo $v > $w
 fi
 
-line="$1,$2,$3,$4"
-echo $line >> main.csv
-echo "Inserted $1,$2,$3,$4 into main.csv"
-awk -F'[-/]' '{printf "%02d-%02d-%02d\t%s\n", $3,$2,$1, $0}' main.csv | sort | cut -f2- > temp.csv   # sort by date by default, awk needed cuz date in dd/mm/yy format
-mv temp.csv main.csv
+echo "$1,$2,$3,$4" >> $w
+echo "Inserted $1,$2,$3,$4 into $w"
+awk -F'[-/]' '{printf "%02d-%02d-%02d\t%s\n", $3,$2,$1, $0}' $w | sort | cut -f2- > $t   
+mv $t $w
 
-for i in "${flags[@]}"
+for i in "${f[@]}"
 do 
     case "${i}" in
         c)
-           answer=0
            echo "$header"
            while IFS="," read -r col1 col2 col3 col4
            do
-                if [ "$category" = "$col2" ]; then
+                if [ "$c" = "$col2" ]; then
                     
-                    let answer=$answer+$col3
+                    let p=$p+$col3
                 fi
-           done < <(tail -n +2 main.csv)                            # tail -n +2 to skip header
-           echo $answer
+           done < <(tail -n +2 $w)                           
+           echo $p
            ;;
-        n) echo "Name: $name"
-           answer=0;
+        n) 
            while IFS="," read -r col1 col2 col3 col4
            do
-                if [ "$name" = "$col4" ]; then
-                    let answer=$answer+$col3
+                if [ "$n" = "$col4" ]; then
+                    let q=$q+$col3
                 fi
-           done < <(tail -n +2 main.csv)                            # tail -n +2 to skip header
-           echo $answer
+           done < <(tail -n +2 $w)                            
+           echo $q
            ;;
-        s) echo "Sort: $sortcol"
-            case $sortcol in 
-                date)  ;;                                           # already sorted by date
-                category) head -n1 main.csv && tail -n+2 main.csv | sort -t"," -k2 > temp.csv # ensure that header itself is not sorted
-                          mv temp.csv > main.csv
+        s) 
+            case $s in 
+                category) echo $v > $t
+                        tail -n +2 $w | sort -t"," -k2 >> $t 
+                        mv $t $w
                         ;;
-                amount) head -n1 main.csv && tail -n+2 main.csv | sort -t"," -k3 > temp.csv
-                        mv temp.csv main.csv 
+                amount) echo $v > $t
+                        tail -n +2 $w  | sort -t"," -k3 >> $t
+                        mv $t $w 
                         ;;
-                name) head -n1 main.csv && tail -n+2 main.csv | sort -t"," -k4 > temp.csv
-                        mv temp.csv > main.csv
+                name)   echo $v > $t
+                        tail -n +2 $w  | sort -t"," -k4 >> $t
+                        mv $t $w
                         ;;
             esac
             ;;
-        h) echo "Name: Expenses_Info"
+        h) echo "Name: Expenses"
            echo "Usage: ./q8.sh [-c expenditure_item_category] [-n expenditure_for_name] [-s sort_column_name] [-h help] Args 1-4"
                 
            echo "Description: Adds argument as entry in main.csv and sorts the file chronologically."
