@@ -1,6 +1,6 @@
-#The script takes a text file as input. The txt file contains the name and the major of the
-#student in each line and the shell script should print the
-#Major names and their count separated by a space, sorted by count descending
-#the number of students. If the count is the same, sort in ascending alphabetical
-#order of the major name.
-cat $1 | cut -d " " -f 2 | sort | uniq -c | sort -nr | awk '{print $2, $1}'
+fun(){
+    cat $1 | awk $3 | sort | uniq $2
+}
+fun $1 -c {'print$2'} | sort -nk1,1r | awk {'print$2" "$1'}
+fun $1 -d {'print$1'}
+fun $1 -u {'print$1'} | wc -l
