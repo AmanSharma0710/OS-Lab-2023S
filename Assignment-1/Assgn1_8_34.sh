@@ -69,14 +69,17 @@ do
         s) echo "Sort: $sortcol"
             case $sortcol in 
                 date)  ;;                                           # already sorted by date
-                category) head -n1 main.csv && tail -n+2 main.csv | sort -t"," -k2 > temp.csv # ensure that header itself is not sorted
-                          mv temp.csv > main.csv
+                category) echo "Date,Category,Amount,Name" > temp.csv
+                        tail -n +2 main.csv | sort -t"," -k2 >> temp.csv 
+                        mv temp.csv main.csv
                         ;;
-                amount) head -n1 main.csv && tail -n+2 main.csv | sort -t"," -k3 > temp.csv
-                        mv temp.csv main.csv 
+                amount) echo "Date,Category,Amount,Name" > temp.csv
+                        tail -n +2 main.csv | sort -n -t"," -k3 >> temp.csv 
+                        mv temp.csv main.csv
                         ;;
-                name) head -n1 main.csv && tail -n+2 main.csv | sort -t"," -k4 > temp.csv
-                        mv temp.csv > main.csv
+                name) echo "Date,Category,Amount,Name" > temp.csv
+                        tail -n +2 main.csv | sort -t"," -k4 >> temp.csv 
+                        mv temp.csv main.csv
                         ;;
             esac
             ;;
