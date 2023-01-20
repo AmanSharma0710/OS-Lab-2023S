@@ -1,10 +1,10 @@
 answer=1
-for line in $(rev <$1)
+for line in $(rev $1)
 do
     x=$answer
     y=$line
-    while true
-    do((y!=0))||break
+    while [ $y -ne 0 ] 
+    do
         t=$x
         x=$y
         y=$((t%y))
