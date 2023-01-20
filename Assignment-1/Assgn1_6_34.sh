@@ -1,22 +1,33 @@
-s="$(seq 2 1e6|sort)"
+typeset -a a
+typeset i j
+> output.txt
 
-for n in $(seq 2 1e6)
-do
-  s="$(comm -23 <(echo "$s") <(seq $((n * n)) $n 1e6|sort))"
+a[1]=""
+for (( i = 2; i <= 1000000; i++ )); do
+  a[$i]=$i
+done
+for (( i = 2; i * i <= 1000000; i++ )); do
+  if [[ ! -z ${a[$i]} ]]; then
+    for (( j = i * i; j <= 1000000; j += i )); do
+      a[$j]=""
+    done
+  fi
 done
 
-for i in `tr -d '\r' < input.txt`
+for k in `tr -d '\r' < input.txt`
 do   
-  for j in $(echo "$s" | sort -n)
+  d=()
+  for (( i = 1; i * i <= k; i++ )); 
   do
-    if [ $((i / j * j)) == $i ]
-    then
-    a+="$j "
+    if [ $((k / i * i)) == $k ]; then
+      if [[ ! -z ${a[$i]} ]]; then
+        d+=($i) 
+      fi
+      if [[ ! -z ${a[$((k/i))]} ]]; then
+        d+=($((k/i)))
+      fi
     fi
   done
-  echo ${a[*]} >> output.txt && a=""
+  d_sorted=($(for dd in "${d[@]}"; do echo $dd; done | sort -n)) 
+  echo ${d_sorted[*]} >> output.txt && d=()
 done 
-
-
-
-
