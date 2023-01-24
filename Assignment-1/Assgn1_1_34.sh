@@ -7,8 +7,8 @@ do
     do
         t=$x
         x=$y
-        y=$((t%y))
+        let y=$t%$y
     done
-    answer=$((answer*(line/x)))
+    let answer=$line/$x*$answer
     echo $answer
 done | tail -1
