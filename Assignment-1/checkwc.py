@@ -5,7 +5,7 @@ for i in [1, 2, 4, 7, 9]:
 wc = 0
 for file in files:
     with open(file) as f:
-        content = f.read().replace('=', ' = ').replace('|', ' | ').replace(';', ' ; ').replace(',', ' , ').replace('>', ' > ').replace('<', ' < ')
+        content = f.read().replace('=', ' = ').replace('|', ' | ').replace(';', ' ; ').replace(',', ' , ').replace('>', ' > ').replace('<', ' < ').replace('(', ' ( ').replace(')', ' ) ').replace('[', ' [ ').replace(']', ' ] ').replace('{', ' { ').replace('}', ' } ')
         wc += len(content.split())
         print(file, len(content.split()))
 print("Total: ", wc)
