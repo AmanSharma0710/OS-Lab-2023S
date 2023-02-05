@@ -24,47 +24,102 @@ class commands{
     public:
     string command;
     vector<string> args;
-    int output_file, input_file;
+    string output_file, input_file;
 };
 
 vector<commands> parse(char *user_input){
     vector<commands> new_procs;
     commands new_proc;
-    new_proc.output_file = -1;
-    new_proc.input_file = -1;
+    new_proc.output_file = "";
+    new_proc.input_file = "";
     int input_idx = 0;
     char input;
     do{
         input = user_input[input_idx++];
-        if(input == ' ' || input == '\t' || input == '\n'){
+        if(input == '|')
+        {
             if(new_proc.command.size() != 0){
                 new_procs.push_back(new_proc);
                 new_proc.command = "";
                 new_proc.args.clear();
-                new_proc.output_file = -1;
-                new_proc.input_file = -1;
+                new_proc.output_file = "";
+                new_proc.input_file = "";
             }
         }
-        else if(input == '<'){
-            input = user_input[input_idx++];
-            string file_name = "";
-            while(input != ' ' && input != '\t' && input != '\n'){
-                file_name += input;
-                input = user_input[input_idx++];
+        else if(input == '\n' || input == '\t' || input == ' '){
+            if(new_proc.command.size() != 0){
+                string argument="";
+                do{
+                    input = user_input[input_idx++];
+                    
+                    if(input=='|'){
+                        if(argument.length()!=0)
+                        {
+                            new_proc.args.push_back(argument);
+                            argument="";
+                        }
+                        input_idx--;
+                        break;
+                    }
+                    else if(input == '\n' || input == '\t' || input == ' ')
+                    {
+                        if(argument.length()!=0)
+                        {
+                            new_proc.args.push_back(argument);
+                            argument="";
+                        }
+                    }
+                    else if(input == '<'){
+                        if(argument.length()!=0)
+                        {
+                            new_proc.args.push_back(argument);
+                            argument="";
+                        }
+                        input = user_input[input_idx++];
+                        string file_name = "";
+                        while(input == ' ' || input == '\t' || input == '\n')
+                        {
+                            input = user_input[input_idx++];
+                        }
+                        while(input != ' ' && input != '\t' && input != '\n' && input != '|'){
+                            file_name += input;
+                            input = user_input[input_idx++];
+                        }
+                        new_proc.input_file = file_name;
+                        input_idx--;
+                    }
+                    else if(input == '>'){
+                        if(argument.length()!=0)
+                        {
+                            new_proc.args.push_back(argument);
+                            argument="";
+                        }
+                        input = user_input[input_idx++];
+                        string file_name = "";
+                        while(input == ' ' || input == '\t' || input == '\n')
+                        {
+                            input = user_input[input_idx++];
+                        }
+                        while(input != ' ' && input != '\t' && input != '\n' && input != '|'){
+                            file_name += input;
+                            input = user_input[input_idx++];
+                        }
+                        new_proc.output_file = file_name;
+                        input_idx--;
+                    }
+                    else
+                    {
+                        argument += input;
+                    }
+                }while(input != '\n' && input != '|');
+                new_procs.push_back(new_proc);
+                new_proc.command = "";
+                new_proc.args.clear();
+                new_proc.output_file = "";
+                new_proc.input_file = "";
+
+                }
             }
-            new_proc.input_file = open(file_name.c_str(), O_RDONLY);
-            input_idx--;
-        }
-        else if(input == '>'){
-            input = user_input[input_idx++];
-            string file_name = "";
-            while(input != ' ' && input != '\t' && input != '\n'){
-                file_name += input;
-                input = user_input[input_idx++];
-            }
-            new_proc.output_file = open(file_name.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0666);
-            input_idx--;
-        }
         else{
             new_proc.command += input;
         }
@@ -89,23 +144,37 @@ signed main(){
         }while(input != '\n');
 
         vector<commands> new_procs = parse(user_input);  //parse the user input
-        if(new_procs.size() == 0) continue;  //if the user input is empty, continue
-        
-        string first_command = new_procs[0].command;  //get the first command
-        if(first_command == "exit") break;   //if the first command is exit, break the loop
-        else if(first_command == "cd"){ //if the first command is cd
-            if(new_procs[0].args.size() == 0){  //if there is no argument, go to home directory
-                chdir(getenv("HOME"));
-            }
-            else{   //if there is an argument, go to that directory
-                chdir(new_procs[0].args[0].c_str());
-            }
-        }
-        else if(first_command == "pwd"){ //if the first command is pwd
-            cout << pwd << endl;    //print the current working directory
-        }
-        // else{
-        //     execute(new_procs, runinbg);  //execute the commands
+
+        // //print all commands parsed 
+        // for(int i = 0; i < new_procs.size(); i++){
+        //     cout<<"command "<<i<<": ";
+        //     cout << new_procs[i].command << endl;
+        //     for(int j = 0; j < new_procs[i].args.size(); j++){
+        //         cout<<"arg "<<j<<": ";
+        //         cout << new_procs[i].args[j] << endl;
+        //     }
+        //     cout <<"Input File:"<< new_procs[i].input_file << endl;
+        //     cout <<"Output File:"<< new_procs[i].output_file << endl;
+        //     cout<<endl;
         // }
+
+        // if(new_procs.size() == 0) continue;  //if the user input is empty, continue
+        
+        // string first_command = new_procs[0].command;  //get the first command
+        // if(first_command == "exit") break;   //if the first command is exit, break the loop
+        // else if(first_command == "cd"){ //if the first command is cd
+        //     if(new_procs[0].args.size() == 0){  //if there is no argument, go to home directory
+        //         chdir(getenv("HOME"));
+        //     }
+        //     else{   //if there is an argument, go to that directory
+        //         chdir(new_procs[0].args[0].c_str());
+        //     }
+        // }
+        // else if(first_command == "pwd"){ //if the first command is pwd
+        //     cout << pwd << endl;    //print the current working directory
+        // }
+        // // else{
+        // //     execute(new_procs, runinbg);  //execute the commands
+        // // }
     }
 }
