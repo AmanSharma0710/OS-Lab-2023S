@@ -158,23 +158,48 @@ signed main(){
         //     cout<<endl;
         // }
 
-        // if(new_procs.size() == 0) continue;  //if the user input is empty, continue
+        if(new_procs.size() == 0) continue;  //if the user input is empty, continue
         
-        // string first_command = new_procs[0].command;  //get the first command
-        // if(first_command == "exit") break;   //if the first command is exit, break the loop
-        // else if(first_command == "cd"){ //if the first command is cd
-        //     if(new_procs[0].args.size() == 0){  //if there is no argument, go to home directory
-        //         chdir(getenv("HOME"));
-        //     }
-        //     else{   //if there is an argument, go to that directory
-        //         chdir(new_procs[0].args[0].c_str());
-        //     }
-        // }
-        // else if(first_command == "pwd"){ //if the first command is pwd
-        //     cout << pwd << endl;    //print the current working directory
-        // }
-        // // else{
-        // //     execute(new_procs, runinbg);  //execute the commands
-        // // }
+        string first_command = new_procs[0].command;  //get the first command
+        if(first_command == "exit") break;   //if the first command is exit, break the loop
+        else if(first_command == "cd"){ //if the first command is cd
+            if(new_procs[0].args.size() == 0){  //if there is no argument, go to home directory
+                chdir(getenv("HOME"));
+            }
+            else{   //if there is an argument, go to that directory
+                chdir(new_procs[0].args[0].c_str());
+            }
+        }
+        else if(first_command == "pwd"){ //if the first command is pwd
+            cout << pwd << endl;    //print the current working directory
+        }
+        else{
+            //execute the command using execlp
+            int pid = fork();
+            if(pid == 0){
+                if(new_procs[0].input_file != ""){
+                    int fd = open(new_procs[0].input_file.c_str(), O_RDONLY);
+                    dup2(fd, 0);
+                    close(fd);
+                }
+                if(new_procs[0].output_file != ""){
+                    int fd = open(new_procs[0].output_file.c_str(), O_WRONLY | O_CREAT, 0666);
+                    dup2(fd, 1);
+                    close(fd);
+                }
+                char *args[new_procs[0].args.size()+2];
+                args[0] = new char[new_procs[0].command.size()+1];
+                strcpy(args[0], new_procs[0].command.c_str());
+                for(int i = 0; i < new_procs[0].args.size(); i++){
+                    args[i+1] = new char[new_procs[0].args[i].size()+1];
+                    strcpy(args[i+1], new_procs[0].args[i].c_str());
+                }
+                args[new_procs[0].args.size()+1] = NULL;
+                execvp(args[0], args);
+            }
+            else{
+                wait(NULL);
+            }
+        }
     }
 }
