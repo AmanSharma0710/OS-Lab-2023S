@@ -405,8 +405,9 @@ signed main(){
         {
             string first_command = new_procs[0].command;  //get the first command
 
-            if(first_command[0] == 'e' && first_command[1] == 'x' && first_command[2] == 'i' && first_command[3] == 't' )
+            if(first_command == "exit")
             {
+                hist.saveHistory();     //save the history
                 cout<<  "Exiting shell" << endl;
                 return 0;   //if the first command is exit, exit
             } 
