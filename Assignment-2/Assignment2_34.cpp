@@ -17,6 +17,7 @@
 #include <map>
 #include <string>
 #include <time.h>
+#include <readline/readline.h>
 
 using namespace std;
 
@@ -132,15 +133,40 @@ vector<commands> parse(char *user_input){
 }
 
 signed main(){
-    char pwd[1024], user_input[1024];
+    char *cwd = (char *)NULL;
+    char *user_input = (char *)NULL;
 
     while(1){   //we start the shell
-        getcwd(pwd, 1024);  //get the current working directory
-        cout << pwd << "$ ";   //print the current working directory
-        
-        for(int i = 0; i < 1024; i++)
-            user_input[i] = '\n';
-        cin.getline(user_input, 1024);  //get the user input
+        if(cwd != (char *)NULL){
+            free(cwd);
+            cwd = (char *)NULL;
+        }
+        cwd = getcwd(cwd, 0);  //get the current working directory
+        if(cwd == (char *)NULL){
+            perror("getcwd");
+            exit(1);
+        }
+        char *prompt = (char *)NULL;
+        prompt = (char *)malloc(strlen(cwd) + 3);
+        strcpy(prompt, cwd);
+        strcat(prompt, "$ ");   //create the prompt
+
+        if(user_input != (char *)NULL){
+            free(user_input);
+            user_input = (char *)NULL;
+        }
+        user_input = readline(prompt);  //read the user input
+        if(user_input == (char *)NULL){
+            perror("readline");
+            exit(1);
+        }
+        //Add a newline to the end of the input so that the parser can parse it
+        user_input = (char *)realloc(user_input, strlen(user_input) + 2);
+        strcat(user_input, "\n");
+
+        //Print the user input and length for debugging
+        // printf("User input: %s.\n", user_input);
+        // printf("Length: %d\n", strlen(user_input));
 
         vector<commands> new_procs = parse(user_input);  //parse the user input
 
@@ -248,7 +274,7 @@ signed main(){
                         }
                     }
                     else if(curr_command == "pwd"){ //if the command is pwd
-                        cout << pwd << endl;    //print the current working directory
+                        cout << cwd << endl;    //print the current working directory
                     }
                     else{
                         char *total_args[new_procs[i].args.size()+2];
@@ -316,7 +342,7 @@ signed main(){
                 }
             }
             else if(first_command == "pwd"){ //if the first command is pwd
-                cout << pwd << endl;    //print the current working directory
+                cout << cwd << endl;    //print the current working directory
             }
             else{
                 int pid = fork();
