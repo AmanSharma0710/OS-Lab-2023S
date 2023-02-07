@@ -30,105 +30,70 @@ class commands{
     string output_file, input_file;
 };
 
-vector<commands> parse(char *user_input){
+vector<commands> parse(char *user_input, int &background, int &valid_input){
+    background = 0;
+    valid_input = 1;
     vector<commands> new_procs;
-    commands new_proc;
-    new_proc.command = "";
-    new_proc.args.clear();
-    new_proc.output_file = "";
-    new_proc.input_file = "";
-    int input_idx = 0;
-    char input;
-    do{
-        input = user_input[input_idx++];
-        if(input == '|')
-        {
-            if(new_proc.command.size() != 0){
-                new_procs.push_back(new_proc);
-                new_proc.command = "";
-                new_proc.args.clear();
-                new_proc.output_file = "";
-                new_proc.input_file = "";
+    char* input = strdup(user_input);
+    char *complete_command, *token;
+    const char *delim_pipe = "|", *delim_space = " ";
+    while((complete_command = strsep(&input, delim_pipe))!=NULL){
+        if(strlen(complete_command) == 0) continue;
+        commands new_command;
+        new_command.command = "";
+        new_command.args.clear();
+        new_command.input_file = "";
+        new_command.output_file = "";
+        int read_input = 0, read_output = 0;
+        while((token = strsep(&complete_command, delim_space))!=NULL){
+            if(strlen(token) == 0) continue;
+            if(background){
+                valid_input = 0;
+                break;
             }
-        }
-        else if(input == '\n' || input == '\t' || input == ' ' ){
-            if(new_proc.command.size() != 0){
-                string argument="";
-                do{
-                    input = user_input[input_idx++];
-                    
-                    if(input=='|'){
-                        if(argument.length()!=0)
-                        {
-                            new_proc.args.push_back(argument);
-                            argument="";
-                        }
-                        input_idx--;
-                        break;
-                    }
-                    else if(input == '\n' || input == '\t' || input == ' ')
-                    {
-                        if(argument.length()!=0)
-                        {
-                            new_proc.args.push_back(argument);
-                            argument="";
-                        }
-                    }
-                    else if(input == '<'){
-                        if(argument.length()!=0)
-                        {
-                            new_proc.args.push_back(argument);
-                            argument="";
-                        }
-                        input = user_input[input_idx++];
-                        string file_name = "";
-                        while(input == ' ' || input == '\t' || input == '\n')
-                        {
-                            input = user_input[input_idx++];
-                        }
-                        while(input != ' ' && input != '\t' && input != '\n' && input != '|'){
-                            file_name += input;
-                            input = user_input[input_idx++];
-                        }
-                        new_proc.input_file = file_name;
-                        input_idx--;
-                    }
-                    else if(input == '>'){
-                        if(argument.length()!=0)
-                        {
-                            new_proc.args.push_back(argument);
-                            argument="";
-                        }
-                        input = user_input[input_idx++];
-                        string file_name = "";
-                        while(input == ' ' || input == '\t' || input == '\n')
-                        {
-                            input = user_input[input_idx++];
-                        }
-                        while(input != ' ' && input != '\t' && input != '\n' && input != '|'){
-                            file_name += input;
-                            input = user_input[input_idx++];
-                        }
-                        new_proc.output_file = file_name;
-                        input_idx--;
-                    }
-                    else
-                    {
-                        argument += input;
-                    }
-                }while(input != '\n' && input != '|');
-                new_procs.push_back(new_proc);
-                new_proc.command = "";
-                new_proc.args.clear();
-                new_proc.output_file = "";
-                new_proc.input_file = "";
-
+            if(strcmp(token, "&") == 0){
+                background = 1;
+                continue;
+            }
+            if(new_command.command == ""){
+                new_command.command = token;
+            }
+            else if(token[0] == '<'){
+                if(new_command.input_file != ""){
+                    valid_input = 0;
+                    break;
                 }
+                if(strlen(token) > 1){
+                    new_command.input_file = (token + 1);
+                    continue;
+                }
+                read_input = 1;
             }
-        else{
-            new_proc.command += input;
+            else if(token[0] == '>'){
+                if(new_command.output_file != ""){
+                    valid_input = 0;
+                    break;
+                }
+                if(strlen(token) > 1){
+                    new_command.output_file = (token + 1);
+                    continue;
+                }
+                read_output = 1;
+            }
+            else if(read_input){
+                new_command.input_file = token;
+                read_input = 0;
+            }
+            else if(read_output){
+                new_command.output_file = token;
+                read_output = 0;
+            }
+            else{
+                new_command.args.push_back(token);
+            }
         }
-    }while(input != '\n');
+        new_procs.push_back(new_command);
+    }
     return new_procs;
 }
 
@@ -160,17 +125,18 @@ signed main(){
             perror("readline");
             exit(1);
         }
-        //Add a newline to the end of the input so that the parser can parse it
-        user_input = (char *)realloc(user_input, strlen(user_input) + 2);
-        strcat(user_input, "\n");
 
         //Print the user input and length for debugging
         // printf("User input: %s.\n", user_input);
         // printf("Length: %d\n", strlen(user_input));
+        int background, valid_input;
+        vector<commands> new_procs = parse(user_input, background, valid_input);  //parse the user input
+        if(!valid_input){
+            cout<<"Invalid input"<<endl;
+            continue;
+        }
 
-        vector<commands> new_procs = parse(user_input);  //parse the user input
-
-        // // //print all commands parsed 
+        // //print all commands parsed 
         // for(int i = 0; i < new_procs.size(); i++){
         //     cout<<"command "<<i<<": ";
         //     cout << new_procs[i].command << endl;
@@ -182,19 +148,7 @@ signed main(){
         //     cout <<"Output File:"<< new_procs[i].output_file << endl;
         //     cout<<endl;
         // }
-
-        //handling trailing whitespaces
-        for(int i = 0; i < new_procs.size(); i++)
-        {
-            if(new_procs[i].args.size()==0)
-                continue;
-            int j = new_procs[i].args.size() -1;
-            if(new_procs[i].args[j][0] == ' ' || new_procs[i].args[j][0] == '\t' || new_procs[i].args[j][0] == '\n' || new_procs[i].args[j][0] == '\0' || new_procs[i].args[j][0] == '\r')
-            {
-                new_procs[i].args.erase(new_procs[i].args.begin() + j);
-                break;
-            }
-        }
+        // exit(0);
 
         if(new_procs.size() == 0) continue;  //if the user input is empty, continue
         else if(new_procs.size()>1) //pipe multiple commands
