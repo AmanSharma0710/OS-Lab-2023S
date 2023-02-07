@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <assert.h>
 #include <fcntl.h>
 #include <unistd.h>
 #include <wait.h>
@@ -97,11 +98,130 @@ vector<commands> parse(char *user_input, int &background, int &valid_input){
     return new_procs;
 }
 
+class History{
+    //history is saved in a file called .terminalhist
+    public:
+        static const string hist_file;
+        static const int hist_size;
+        //history is a deque of strings, with the most recent command at the top
+        //we store a global and local history
+        static deque<string> history_global;
+        stack<string> up, down;
+        History(){
+            ifstream hist(hist_file.c_str());
+            string line;
+            while(getline(hist, line)){
+                history_global.push_front(line);
+            }
+            hist.close();
+        }
+        void saveHistory(){
+            ofstream hist(hist_file.c_str());
+            for(int i = (int)history_global.size() - 1; i >= 0; i--){
+                hist << history_global[i] << endl;
+            }
+            hist.close();
+        }
+        void addHistory(char *user_input){
+            //if the first character is a space or if the command is empty, we don't add it to the history
+            if(user_input[0] == ' ' || strlen(user_input) == 0) return;
+            //if the command is the same as the last command, we don't add it to the history
+            if(history_global.size() > 0 && history_global.front() == user_input) return;
+            //if the history is full, we remove the last command
+            if(history_global.size() == hist_size){
+                history_global.pop_back();
+            }
+            history_global.push_front(user_input);
+        }
+        void syncHistory(){
+            //we empty the local history
+            while(!up.empty()) up.pop();
+            while(!down.empty()) down.pop();
+            //we add the global history to the local history
+            for(int i = (int)history_global.size() - 1; i >= 0; i--){
+                up.push(history_global[i]);
+            }
+            //we add an empty string to the local history
+            up.push("");
+        }
+        void goUpInHistory(){
+            //if the local history is empty or has just one command, we don't do anything
+            if(up.size() <= 1) return;
+            //we move the last command to the down stack
+            down.push(up.top());
+            //we remove the last command from the up stack
+            up.pop();
+        }
+        void goDownInHistory(){
+            //if we are at the last command, we don't do anything
+            if(down.size() == 0) return;
+            //we move the last command to the up stack
+            up.push(down.top());
+            //we remove the last command from the down stack
+            down.pop();
+        }
+        string getHistory(){
+            assert(up.size() > 0);
+            return up.top();
+        }
+        void updateHistory(char *user_input){
+            assert(up.size() > 0);
+            //we remove the last command from the up stack
+            up.pop();
+            //we add the new command to the up stack
+            up.push(user_input);
+        }
+};
+
+const string History::hist_file = ".terminalhist";
+const int History::hist_size = 1000;
+deque<string> History::history_global;
+History hist;
+
+
+int goUpInHistory(int count, int key){
+    //save the current command in the history using readlines
+    char* current_line = rl_line_buffer;
+    hist.updateHistory(current_line);
+    //go up in the history
+    hist.goUpInHistory();
+    //get the new command
+    string new_command = hist.getHistory();
+    //replace the current command with the new command
+    rl_replace_line(new_command.c_str(), 0);
+    //move the cursor to the end of the line
+    rl_point = rl_end;
+    //redraw the line
+    rl_redisplay();
+    return 0;
+}
+
+int goDownInHistory(int count, int key){
+    char* current_line = rl_line_buffer;
+    hist.updateHistory(current_line);
+    hist.goDownInHistory();
+    string new_command = hist.getHistory();
+    rl_replace_line(new_command.c_str(), 0);
+    rl_point = rl_end;
+    rl_redisplay();
+    return 0;
+}
+
+
 signed main(){
+
+    //make the key bindings to go up and down in the history
+    rl_bind_keyseq("\\e[A", goUpInHistory);
+    rl_bind_keyseq("\\e[B", goDownInHistory);
+
+
     char *cwd = (char *)NULL;
     char *user_input = (char *)NULL;
 
     while(1){   //we start the shell
+        //sync the history
+        hist.syncHistory();
+
         if(cwd != (char *)NULL){
             free(cwd);
             cwd = (char *)NULL;
@@ -125,6 +245,9 @@ signed main(){
             perror("readline");
             exit(1);
         }
+
+        //add the command to the history
+        hist.addHistory(user_input);
 
         //Print the user input and length for debugging
         // printf("User input: %s.\n", user_input);
