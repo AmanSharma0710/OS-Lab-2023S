@@ -243,6 +243,7 @@ void Execute_cd(commands comm){
 void Execute_Command(commands comm, int background, int forkreq){
     string command = comm.command;
     if (command == "exit"){
+        hist.saveHistory();
         printf("Exiting the shell.\n");
         exit(0);
     }
@@ -478,6 +479,9 @@ signed main(){
     signaltstp.sa_handler = &handler_sigtstp;
     signaltstp.sa_flags = SA_RESTART;
     sigaction(SIGTSTP, &signaltstp, NULL);
+
+    rl_bind_keyseq("\\e[A", goUpInHistory);
+    rl_bind_keyseq("\\e[B", goDownInHistory);
 
     Shell();
     return 0;
