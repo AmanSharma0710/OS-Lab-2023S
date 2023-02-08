@@ -4,6 +4,8 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <setjmp.h>
+#include <glob.h>
 #include <assert.h>
 #include <fcntl.h>
 #include <unistd.h>
@@ -242,15 +244,27 @@ void Execute_cd(commands comm){
 
 void Execute_Command(commands comm, int background, int forkreq){
     string command = comm.command;
+    //We expand the arguments to match wildcards
+    vector<string> args;
+    for(int i = 0; i < comm.args.size(); i++){
+        glob_t glob_result;
+        glob(comm.args[i].c_str(), GLOB_TILDE, NULL, &glob_result);
+        for(unsigned int j = 0; j < glob_result.gl_pathc; j++){
+            args.push_back(string(glob_result.gl_pathv[j]));
+        }
+        globfree(&glob_result);
+    }
+    comm.args = args;
+    //We check if the command is a builtin command
     if (command == "exit"){
         hist.saveHistory();
         printf("Exiting the shell.\n");
         exit(0);
     }
-    else if (command == "pwd"){
+    else if (command == "pwd" && comm.args.size() == 0){
         Execute_pwd(comm);
     }
-    else if (command == "cd"){
+    else if (command == "cd" && comm.args.size() <= 1){
         Execute_cd(comm);
     }
     else{
@@ -304,11 +318,14 @@ void Execute_Command(commands comm, int background, int forkreq){
     }
 }
 
+sigjmp_buf env;
+
 void Shell(){
     char *cwd = (char *)NULL;
     char *user_input = (char *)NULL;
 
     while(1){   //we start the shell
+        while(sigsetjmp(env, 1)!=0);    //we set the jump point
         //sync the history
         hist.syncHistory();
 
@@ -453,7 +470,10 @@ void Shell(){
 }
 
 void handler_sigint(int signum){
-    // do nothing
+    // print a new line
+    printf("\n");
+    // jump to the shell prompt
+    siglongjmp(env, 1);
     return;
 }
 
