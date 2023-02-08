@@ -208,13 +208,102 @@ int goDownInHistory(int count, int key){
 }
 
 
-signed main(){
+void Execute_pwd(commands comm){
+    char *cwd = (char *)NULL;
+    cwd = getcwd(cwd, 0);
+    if(cwd == (char *)NULL){
+        perror("getcwd");
+        exit(1);
+    }
+    if (comm.output_file != ""){
+        int fd = open(comm.output_file.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
+        if (fd == -1){
+            perror("Error in opening file.");
+            exit(1);
+        }
+        write(fd, cwd, strlen(cwd));
+        close(fd);
+    }
+    else{
+        cout<<cwd<<endl;
+    }
+}
 
-    //make the key bindings to go up and down in the history
-    rl_bind_keyseq("\\e[A", goUpInHistory);
-    rl_bind_keyseq("\\e[B", goDownInHistory);
+void Execute_cd(commands comm){
+    if (comm.args.size() == 0){
+        chdir(getenv("HOME"));
+    }
+    else{
+        if (chdir(comm.args[0].c_str()) == -1){
+            perror("Error in changing directory.");
+        }
+    }
+}
 
+void Execute_Command(commands comm, int background, int forkreq){
+    string command = comm.command;
+    if (command == "exit"){
+        printf("Exiting the shell.\n");
+        exit(0);
+    }
+    else if (command == "pwd"){
+        Execute_pwd(comm);
+    }
+    else if (command == "cd"){
+        Execute_cd(comm);
+    }
+    else{
+        int pid = 0;
+        // if forkreq is 1, we fork the process i.e. run the command in a child process
+        if (forkreq) pid = fork();
+        // we run the command in the child process
+        if (pid == 0){
+            // setting the input and output files in case of redirection
+            if (comm.input_file != ""){
+                int fd = open(comm.input_file.c_str(), O_RDONLY);
+                if (fd == -1){
+                    perror("Error in opening file.");
+                    exit(1);
+                }
+                dup2(fd, STDIN_FILENO);
+                close(fd);
+            }
+            if (comm.output_file != ""){
+                int fd = open(comm.output_file.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
+                if (fd == -1){
+                    perror("Error in opening file.");
+                    exit(1);
+                }
+                dup2(fd, STDOUT_FILENO);
+                close(fd);
+            }
+            char *args[comm.args.size() + 2];
+            args[0] = (char *)command.c_str();
+            for (int i = 0; i < comm.args.size(); i++){
+                args[i + 1] = (char *)comm.args[i].c_str();
+            }
+            // the last argument must be NULL
+            args[comm.args.size() + 1] = NULL;
+            if (execvp(args[0], args) == -1){
+                perror("Error in executing command.");
+                exit(1);
+            }
+        }
+        else if (pid > 0){
+            // if the command is not to be run in the background, we wait for the child to finish
+            if (!background){
+                waitpid(pid, NULL, 0);
+            }
+        }
+        // error in forking
+        else{
+            perror("Error in forking.");
+            exit(1);
+        }
+    }
+}
 
+void Shell(){
     char *cwd = (char *)NULL;
     char *user_input = (char *)NULL;
 
@@ -255,11 +344,11 @@ signed main(){
         int background, valid_input;
         vector<commands> new_procs = parse(user_input, background, valid_input);  //parse the user input
         if(!valid_input){
-            cout<<"Invalid input"<<endl;
+            printf("Invalid input.\n");
             continue;
         }
 
-        // //print all commands parsed 
+        // print all commands parsed 
         // for(int i = 0; i < new_procs.size(); i++){
         //     cout<<"command "<<i<<": ";
         //     cout << new_procs[i].command << endl;
@@ -273,182 +362,123 @@ signed main(){
         // }
         // exit(0);
 
-        if(new_procs.size() == 0) continue;  //if the user input is empty, continue
-        else if(new_procs.size()>1) //pipe multiple commands
-        {
-            int pipes[new_procs.size()-1][2];
-            for(int i=0;i<new_procs.size()-1;i++)
-            {
-                pipe(pipes[i]);
+        // no new command
+        if (new_procs.size() == 0){
+            continue;
+        }
+        int n = new_procs.size();
+
+        // if there is only one command, we execute it
+        if (n == 1) {
+            Execute_Command(new_procs[0], background, 1);
+            continue;
+        }
+        // if there are multiple commands, we create pipes and execute them
+        else {
+            int pipes[n - 1][2];
+            for (int i = 0; i < n - 1; i++) {
+                if (pipe(pipes[i]) == -1) {
+                    perror("Error in creating pipe.");
+                    exit(1);
+                }
             }
-
-            for(int i=0;i<new_procs.size();i++)
-            {
+            for (int i = 0; i < n; i++) {
                 int pid = fork();
-                if(pid == 0)
-                {
-                    if(i==0)
-                    {
-                        if(new_procs[i].output_file.size() != 0){
-                            int fd = open(new_procs[i].output_file.c_str(), O_WRONLY | O_CREAT, 0666);
-                            dup2(fd, 1);
-                            close(fd);
+                if (pid == 0) {
+                    // setting the input and output files in case of redirection
+                    if (new_procs[i].input_file != ""){
+                        int fd = open(new_procs[i].input_file.c_str(), O_RDONLY);
+                        if (fd == -1){
+                            perror("Error in opening file.");
+                            exit(1);
                         }
-                        if(new_procs[i].input_file.size() != 0){
-                            int fd = open(new_procs[i].input_file.c_str(), O_RDONLY);
-                            dup2(fd, 0);
-                            close(fd);
-                        }
-                        dup2(pipes[i][1], 1);
-                        
+                        dup2(fd, STDIN_FILENO);
+                        close(fd);
                     }
-                    else if(i==new_procs.size()-1)
-                    {
-                        if(new_procs[i].output_file.size() != 0){
-                            int fd = open(new_procs[i].output_file.c_str(), O_WRONLY | O_CREAT, 0666);
-                            dup2(fd, 1);
-                            close(fd);
+                    if (new_procs[i].output_file != ""){
+                        int fd = open(new_procs[i].output_file.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
+                        if (fd == -1){
+                            perror("Error in opening file.");
+                            exit(1);
                         }
-                        if(new_procs[i].input_file.size() != 0){
-                            int fd = open(new_procs[i].input_file.c_str(), O_RDONLY);
-                            dup2(fd, 0);
-                            close(fd);
-                        }
-                        dup2(pipes[i-1][0], 0);
+                        dup2(fd, STDOUT_FILENO);
+                        close(fd);
+                    }
+                    // setting the input and output pipes
+                    if (i != 0) {
+                        dup2(pipes[i - 1][0], STDIN_FILENO);
+                    }
+                    if (i != n - 1) {
+                        dup2(pipes[i][1], STDOUT_FILENO);
+                    }
 
-                    }
-                    else
-                    {
-                        if(new_procs[i].output_file.size() != 0){
-                            int fd = open(new_procs[i].output_file.c_str(), O_WRONLY | O_CREAT, 0666);
-                            dup2(fd, 1);
-                            close(fd);
-                        }
-                        if(new_procs[i].input_file.size() != 0){
-                            int fd = open(new_procs[i].input_file.c_str(), O_RDONLY);
-                            dup2(fd, 0);
-                            close(fd);
-                        }
-                        dup2(pipes[i-1][0], 0);
-                        dup2(pipes[i][1], 1);
-
-                    }
-                    //close all pipes
-                    for(int j=0;j<new_procs.size()-1;j++)
-                    {
+                    for(int j=0;j<n-1;j++){
                         close(pipes[j][0]);
                         close(pipes[j][1]);
                     }
-
-                    string curr_command = new_procs[i].command;  //get the command
-                    
-                    if(curr_command == "cd"){ //if the first command is cd
-                        if(new_procs[i].args.size() == 0){  //if there is no argument, go to home directory
-                            chdir(getenv("HOME"));
-                        }
-                        else{   //if there is an argument, go to that directory
-                            chdir(new_procs[i].args[0].c_str());
-                        }
-                    }
-                    else if(curr_command == "pwd"){ //if the command is pwd
-                        cout << cwd << endl;    //print the current working directory
-                    }
-                    else{
-                        char *total_args[new_procs[i].args.size()+2];
-                        total_args[0] = new char[new_procs[i].command.length()+1];
-                        for(int i = 0; i < new_procs[i].command.length()+1; i++){
-                            total_args[0][i] = '\0';
-                        }
-                        strcpy(total_args[0], new_procs[i].command.c_str());
-
-                        for(int ii = 0; ii < (int)new_procs[i].args.size(); ii++)
-                        {
-                            total_args[ii+1] = new char[new_procs[i].args[ii].length()+1];
-                            for(int j = 0; j < new_procs[i].args[ii].length()+1; j++)
-                            {
-                                total_args[ii+1][j] = '\0';
-                            }
-                            strcpy(total_args[ii+1], new_procs[i].args[ii].c_str());
-                        }
-                        total_args[new_procs[i].args.size()+1] = NULL;
-                        execvp(total_args[0], total_args);
-                        // exit(1);
-                    }
+                    // executing the command
+                    Execute_Command(new_procs[i], background, 0);
                 }
-                else
-                {
-                    if(i==0)
-                    {
+                else if (pid > 0){
+                    if (i != 0) {
+                        close(pipes[i - 1][0]);
+                    }
+                    if (i != n - 1) {
                         close(pipes[i][1]);
                     }
-                    else if(i==new_procs.size()-1)
-                    {
-                        close(pipes[i-1][0]);
+                    if (!background){
+                        waitpid(pid, NULL, 0);
                     }
-                    else
-                    {
-                        close(pipes[i-1][0]);
-                        close(pipes[i][1]);
-                    }
-                    wait(NULL);
-                }
-            }   
-            for(int j=0;j<new_procs.size()-1;j++)
-            {
-                close(pipes[j][0]);
-                close(pipes[j][1]);
-            }
-            for(int j = 0; j < new_procs.size()-1; j++)
-                wait(NULL);
-        }
-        else if(new_procs.size() == 1)
-        {
-            string first_command = new_procs[0].command;  //get the first command
-
-            if(first_command == "exit")
-            {
-                hist.saveHistory();     //save the history
-                cout<<  "Exiting shell" << endl;
-                return 0;   //if the first command is exit, exit
-            } 
-            else if(first_command == "cd"){ //if the first command is cd
-                if(new_procs[0].args.size() == 0){  //if there is no argument, go to home directory
-                    chdir(getenv("HOME"));
-                }
-                else{   //if there is an argument, go to that directory
-                    chdir(new_procs[0].args[0].c_str());
-                }
-            }
-            else if(first_command == "pwd"){ //if the first command is pwd
-                cout << cwd << endl;    //print the current working directory
-            }
-            else{
-                int pid = fork();
-                if(pid == 0){
-                    if(new_procs[0].input_file != ""){
-                        int fd = open(new_procs[0].input_file.c_str(), O_RDONLY);
-                        dup2(fd, 0);
-                        close(fd);
-                    }
-                    if(new_procs[0].output_file != ""){
-                        int fd = open(new_procs[0].output_file.c_str(), O_WRONLY | O_CREAT, 0666);
-                        dup2(fd, 1);
-                        close(fd);
-                    }
-                    char *args[new_procs[0].args.size()+2];
-                    args[0] = new char[new_procs[0].command.length()+1];
-                    strcpy(args[0], new_procs[0].command.c_str());
-                    for(int i = 0; i < new_procs[0].args.size(); i++){
-                        args[i+1] = new char[new_procs[0].args[i].length()+1];
-                        strcpy(args[i+1], new_procs[0].args[i].c_str());
-                    }
-                    args[new_procs[0].args.size()+1] = NULL;
-                    execvp(args[0], args);
                 }
                 else{
-                    wait(NULL);
+                    perror("Error in forking.");
+                    exit(1);
                 }
+                
+            }
+            // closing the pipes
+            for (int i = 0; i < n - 1; i++) {
+                close(pipes[i][0]);
+                close(pipes[i][1]);
+            }
+            // waiting for all the children to finish
+            for (int i = 0; i < n; i++) {
+                int status;
+                wait(&status);
             }
         }
     }
+    return ;
+}
+
+void handler_sigint(int signum){
+    // do nothing
+    return;
+}
+
+
+// If the user presses "Ctrl - z" while a program is executing, the program
+// execution should move to the background and the shell prompt should
+// reappear.
+void handler_sigtstp(int signum){
+    // move the running process to the background
+    int pid = getpid();
+    printf("Process %d moved to the background.\n", pid);
+    raise(SIGSTOP);
+    return;
+}
+
+signed main(){
+    struct sigaction signalint;
+    signalint.sa_handler = &handler_sigint;
+    signalint.sa_flags = SA_RESTART;
+    sigaction(SIGINT, &signalint, NULL);
+
+    struct sigaction signaltstp;
+    signaltstp.sa_handler = &handler_sigtstp;
+    signaltstp.sa_flags = SA_RESTART;
+    sigaction(SIGTSTP, &signaltstp, NULL);
+
+    Shell();
+    return 0;
 }
