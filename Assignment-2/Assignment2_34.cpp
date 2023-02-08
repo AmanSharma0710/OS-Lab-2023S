@@ -154,7 +154,7 @@ void Execute_Command(commands comm, int background, int forkreq){
                     perror("Error in opening file.");
                     exit(1);
                 }
-                dup2(fd, 0);
+                dup2(fd, STDIN_FILENO);
                 close(fd);
             }
             if (comm.output_file != ""){
@@ -163,7 +163,7 @@ void Execute_Command(commands comm, int background, int forkreq){
                     perror("Error in opening file.");
                     exit(1);
                 }
-                dup2(fd, 1);
+                dup2(fd, STDOUT_FILENO);
                 close(fd);
             }
             char *args[comm.args.size() + 2];
@@ -272,7 +272,7 @@ void Shell(){
                             perror("Error in opening file.");
                             exit(1);
                         }
-                        dup2(fd, 0);
+                        dup2(fd, STDIN_FILENO);
                         close(fd);
                     }
                     if (new_procs[i].output_file != ""){
@@ -281,15 +281,15 @@ void Shell(){
                             perror("Error in opening file.");
                             exit(1);
                         }
-                        dup2(fd, 1);
+                        dup2(fd, STDOUT_FILENO);
                         close(fd);
                     }
                     // setting the input and output pipes
                     if (i != 0) {
-                        dup2(pipes[i - 1][0], 0);
+                        dup2(pipes[i - 1][0], STDIN_FILENO);
                     }
                     if (i != n - 1) {
-                        dup2(pipes[i][1], 1);
+                        dup2(pipes[i][1], STDOUT_FILENO);
                     }
 
                     for(int j=0;j<n-1;j++){
@@ -331,7 +331,33 @@ void Shell(){
     return ;
 }
 
+void handler_sigint(int signum){
+    // do nothing
+    return;
+}
+
+
+// If the user presses "Ctrl - z" while a program is executing, the program
+// execution should move to the background and the shell prompt should
+// reappear.
+void handler_sigtstp(int signum){
+    // move the running process to the background
+    int pid = getpid();
+    raise(SIGSTOP);
+    return;
+}
+
 signed main(){
+    struct sigaction signalint;
+    signalint.sa_handler = &handler_sigint;
+    signalint.sa_flags = SA_RESTART;
+    sigaction(SIGINT, &signalint, NULL);
+
+    struct sigaction signaltstp;
+    signaltstp.sa_handler = &handler_sigtstp;
+    signaltstp.sa_flags = SA_RESTART;
+    sigaction(SIGTSTP, &signaltstp, NULL);
+
     Shell();
     return 0;
 }
