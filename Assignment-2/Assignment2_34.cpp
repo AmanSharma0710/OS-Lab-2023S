@@ -129,7 +129,7 @@ void Execute_cd(commands comm){
     }
 }
 
-void Execute_Command(commands comm, int background){
+void Execute_Command(commands comm, int background, int forkreq){
     string command = comm.command;
     if (command == "exit"){
         printf("Exiting the shell.\n");
@@ -142,7 +142,9 @@ void Execute_Command(commands comm, int background){
         Execute_cd(comm);
     }
     else{
-        int pid = fork();
+        int pid = 0;
+        // if forkreq is 1, we fork the process i.e. run the command in a child process
+        if (forkreq) pid = fork();
         // we run the command in the child process
         if (pid == 0){
             // setting the input and output files in case of redirection
@@ -226,7 +228,7 @@ void Shell(){
             continue;
         }
 
-        //print all commands parsed 
+        // print all commands parsed 
         // for(int i = 0; i < new_procs.size(); i++){
         //     cout<<"command "<<i<<": ";
         //     cout << new_procs[i].command << endl;
@@ -245,11 +247,13 @@ void Shell(){
             continue;
         }
         int n = new_procs.size();
+
+        // if there is only one command, we execute it
         if (n == 1) {
-            Execute_Command(new_procs[0], background);
+            Execute_Command(new_procs[0], background, 1);
             continue;
         }
-        
+        // if there are multiple commands, we create pipes and execute them
         else {
             int pipes[n - 1][2];
             for (int i = 0; i < n - 1; i++) {
@@ -283,27 +287,24 @@ void Shell(){
                     // setting the input and output pipes
                     if (i != 0) {
                         dup2(pipes[i - 1][0], 0);
-                        close(pipes[i - 1][0]);
-                        close(pipes[i - 1][1]);
                     }
                     if (i != n - 1) {
                         dup2(pipes[i][1], 1);
-                        close(pipes[i][0]);
-                        close(pipes[i][1]);
+                    }
+
+                    for(int j=0;j<n-1;j++){
+                        close(pipes[j][0]);
+                        close(pipes[j][1]);
                     }
                     // executing the command
-                    Execute_Command(new_procs[i], background);
+                    Execute_Command(new_procs[i], background, 0);
                 }
                 else if (pid > 0){
                     if (i != 0) {
                         close(pipes[i - 1][0]);
-                        close(pipes[i - 1][1]);
                     }
-                    if (i == n - 1) {
-                        for (int j = 0; j < n - 1; j++) {
-                            close(pipes[j][0]);
-                            close(pipes[j][1]);
-                        }
+                    if (i != n - 1) {
+                        close(pipes[i][1]);
                     }
                     if (!background){
                         waitpid(pid, NULL, 0);
@@ -313,20 +314,21 @@ void Shell(){
                     perror("Error in forking.");
                     exit(1);
                 }
+                
             }
-
+            // closing the pipes
             for (int i = 0; i < n - 1; i++) {
                 close(pipes[i][0]);
                 close(pipes[i][1]);
             }
-
+            // waiting for all the children to finish
             for (int i = 0; i < n; i++) {
                 int status;
                 wait(&status);
             }
         }
     }
-
+    return ;
 }
 
 signed main(){
