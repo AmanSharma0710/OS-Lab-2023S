@@ -442,7 +442,11 @@ void Execute_Command(commands comm, int background, int forkreq){
     vector<string> args;
     for(int i = 0; i < comm.args.size(); i++){
         glob_t glob_result;
-        glob(comm.args[i].c_str(), GLOB_TILDE, NULL, &glob_result);
+        int return_value = glob(comm.args[i].c_str(), GLOB_TILDE | GLOB_NOMAGIC, NULL, &glob_result);
+        if(return_value != 0){
+            args.push_back(comm.args[i]);
+            continue;
+        }
         for(unsigned int j = 0; j < glob_result.gl_pathc; j++){
             args.push_back(string(glob_result.gl_pathv[j]));
         }
@@ -455,10 +459,10 @@ void Execute_Command(commands comm, int background, int forkreq){
         printf("Exiting the shell.\n");
         exit(0);
     }
-    else if (command == "pwd" && comm.args.size() == 0){
+    else if (command == "pwd"){
         Execute_pwd(comm);
     }
-    else if (command == "cd" && comm.args.size() <= 1){
+    else if (command == "cd"){
         Execute_cd(comm);
     }
     else if (command == "sb"){
