@@ -1,0 +1,19 @@
+Report: Squashbug Heuristic
+
+Introduction:
+In this report, we will discuss the heuristic used for the implementation of the "sb" command in the shell. The command is used to detect the root cause of malwares that spawn multiple processes, causing havoc in the system.
+
+Heuristic:
+The heuristic used to detect the root cause of the malware is based on finding the process with the highest cumulative time spent in the system. To achieve this, the following steps are taken:
+
+    -Finding all the ancestors of the given process: The first step is to find all the parent, grandparent, etc. processes of the given process. This will provide us with a chain of processes that can be the root cause of the malware.
+
+    -Removing init and scheduler processes: The highest two in the chain, the init process and the scheduler, are removed as they are not the root cause of the malware.
+
+    -Finding cumulative time spent: For the remaining ancestors, the time their direct children and grandchildren have been active is calculated. 
+
+    -Detecting the root cause: The process with the highest cumulative time is considered as the root cause of the malware. 
+
+Justification:
+Our heuristic calculates the time a process's children and grandchildren have been active. This cumulative time in a way represents the direct footprint of any process in terms of CPU compute time demanded. This heuristic is justified by the fact that malware processes, by definition, cause harm to the system by demanding a lot of resources. Such processes usually run continuously, consuming system resources and affecting performance. Further, the cumulative time helps us find the root of the malware, since as it will spawn more and more processes it will always have the max sum.
+
