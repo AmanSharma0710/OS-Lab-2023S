@@ -343,6 +343,7 @@ void handler_sigint(int signum){
 void handler_sigtstp(int signum){
     // move the running process to the background
     int pid = getpid();
+    printf("Process %d moved to the background.\n", pid);
     raise(SIGSTOP);
     return;
 }
