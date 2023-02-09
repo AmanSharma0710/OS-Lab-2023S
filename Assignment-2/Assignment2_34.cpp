@@ -681,11 +681,11 @@ void Shell(){
                 close(pipes[i][0]);
                 close(pipes[i][1]);
             }
-            // waiting for all the children to finish
-            for (int i = 0; i < n; i++) {
-                int status;
-                wait(&status);
-            }
+            // // waiting for all the children to finish
+            // for (int i = 0; i < n; i++) {
+            //     int status;
+            //     wait(&status);
+            // }
         }
     }
     return ;
