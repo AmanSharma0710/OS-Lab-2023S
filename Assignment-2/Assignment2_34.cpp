@@ -13,13 +13,21 @@
 #include <signal.h>
 #include <termios.h>
 #include <vector>
+#include <fcntl.h>
 #include <set>
 #include <stack>
 #include <sys/inotify.h>
 #include <sys/select.h>
 #include <map>
+#include <ctype.h>
 #include <string>
 #include <time.h>
+#include <sys/types.h>
+#include <sys/mman.h>
+#include <sys/stat.h>
+#include <sys/wait.h>
+#include <dirent.h>
+#include <fstream>
 #include <readline/readline.h>
 #include <queue>
 
@@ -181,7 +189,6 @@ const int History::hist_size = 1000;
 deque<string> History::history_global;
 History hist;
 
-
 int goUpInHistory(int count, int key){
     //save the current command in the history using readlines
     char* current_line = rl_line_buffer;
@@ -210,6 +217,25 @@ int goDownInHistory(int count, int key){
     return 0;
 }
 
+sigjmp_buf env;
+
+void handler_sigint(int signum){
+    // print a new line
+    printf("Process Terminated\n");
+    // jump to the shell prompt
+    siglongjmp(env, 1);
+}
+
+void handler_sigtstp(int signum){
+    // print a new line
+    printf("Moved to background\n");
+    // jump to the shell prompt
+    siglongjmp(env, 1);
+}
+
+void handler_nothing(int signum){
+    // do nothing
+}
 
 void Execute_pwd(commands comm){
     char *cwd = (char *)NULL;
@@ -457,6 +483,160 @@ void Execute_sb(commands comm){
     }
 }
 
+int is_number(char* str) {
+    int i = 0;
+    while (str[i] != '\0') {
+        if (!isdigit(str[i])) {
+            return 0;
+        }
+        i++;
+    }
+    return 1;
+}
+
+void Execute_delep(commands comm){
+    int shm_fd;
+    int m_size = 102 * sizeof(int);
+    int* shared_memory;
+    const char* name = "Process_ID";
+    shm_fd = shm_open(name, O_RDWR | O_TRUNC, S_IRUSR | S_IWUSR | S_IXUSR);
+    if (shm_fd < 0) {
+        perror("Error in shm_open");
+        return ;
+    }
+    ftruncate(shm_fd, m_size);
+    shared_memory = (int *) mmap(NULL, m_size, PROT_READ | PROT_WRITE, MAP_SHARED, shm_fd, 0);
+    if (shared_memory == NULL ){
+        perror("Error in map");
+        return ;
+    }
+    else {
+        //cout << "Shared memory created successfully.\n";
+    }
+    int status;
+
+    char* target_file = new char[comm.args[0].length() + 1];
+    strcpy(target_file, comm.args[0].c_str());
+
+    if (fork() == 0) {
+        vector<int> proc_open, proc_lock;
+        DIR* proc_dir = opendir("/proc");
+        if (proc_dir == NULL) {
+            perror("Cannot open /proc directory");
+            exit(0);
+        }
+        struct dirent *dir_entry;
+
+        while (dir_entry = readdir(proc_dir)) {
+            if (dir_entry -> d_type == 4 && is_number(dir_entry -> d_name)) {
+                string path = "/proc/";
+                path += dir_entry -> d_name;
+                path += "/fd";
+                char* cpath = new char[path.length() + 1];
+                strcpy(cpath, path.c_str());
+                DIR* fd_dir = opendir(cpath);
+                if (fd_dir == NULL) {
+                    perror("Cannot open /proc directory");
+                    exit(0);
+                }
+                struct dirent *fd_entry;
+                while (fd_entry = readdir(fd_dir)) {
+                    if (fd_entry -> d_type == 10) {
+                        char* link_val = new char[100];
+                        char* link = new char[100];
+                        sprintf(link, "%s/%s", path.c_str(), fd_entry -> d_name);
+                        ssize_t val = 0;
+                        val = readlink(link, link_val, 100);
+                        link_val[val] = '\0';
+                        if (strcmp(link_val, target_file) == 0) {
+                            proc_open.push_back(stoi(dir_entry -> d_name));
+                        }
+                    }
+                }
+            } 
+        }
+
+        int file = 0;
+        file = open(target_file, O_RDONLY);
+        struct stat file_stat;
+        fstat(file, &file_stat);
+        freopen("/proc/locks", "r", stdin);
+        while (feof(stdin) == 0) {
+            string arr[8];
+            for (int i = 0; i < 8; i++) {
+                cin >> arr[i];
+            }
+            if (arr[1] == "FLOCK") {
+                int proc_id = stoi(arr[4]);
+                int count = 0;
+                int i;
+                for (i = 0; i < arr[5].length(); i++) {
+                    if (arr[5][i] == ':') {
+                        count++;
+                        if (count == 2) {
+                            i++;
+                            break;
+                        }
+                    }
+                }
+                string id = arr[5].substr(i, arr[5].length() - i);
+                char* cid = new char[id.length() + 1];
+                strcpy(cid, id.c_str());
+                if (stoi(cid) == file_stat.st_ino) {
+                    proc_lock.push_back(proc_id);
+                }
+            }
+            
+        }
+        shared_memory[0] = proc_open.size();
+        shared_memory[1] = proc_lock.size();
+        for (int i = 0; i < proc_open.size(); i++) {
+            shared_memory[i + 2] = proc_open[i];
+        }
+        for (int i = 0; i < proc_lock.size(); i++) {
+            shared_memory[i + 2 + proc_open.size()] = proc_lock[i];
+        }
+        exit(0);
+    }
+    wait(&status);
+    int num_open = shared_memory[0];
+    int num_lock = shared_memory[1];
+    set<int> processes;
+    cout << "Processes using file: ";
+    for (int i = 0; i < num_open; i++) {
+        cout << shared_memory[i + 2] << " ";
+        processes.insert(shared_memory[i + 2]);
+    }
+    cout << endl;
+    cout << "Processes locking file: ";
+    for (int i = 0; i < num_lock; i++) {
+        cout << shared_memory[i + 2 + num_open] << " ";
+        processes.insert(shared_memory[i + 2 + num_open]);
+    }
+    cout << endl;
+    if (num_lock + num_open == 0) {
+        cout << "No processes are using or locking the file.\n";
+        return;
+    }
+    cout << "Kill all processes and delete the file? (y/n): " ;
+    char c;
+    cin >> c;
+    while (c != 'y' && c != 'n') {
+        cout << "Enter y or n: ";
+        cin >> c;
+    }
+    if (c == 'y') {
+        for (auto it = processes.begin(); it != processes.end(); it++) {
+            int r = kill(*it, SIGKILL);
+            if (r == -1) {
+                perror("Error in kill");
+            }
+        }
+        remove(target_file);
+    }
+
+}
+
 void Execute_Command(commands comm, int background, int forkreq){
     string command = comm.command;
     //We expand the arguments to match wildcards
@@ -474,6 +654,7 @@ void Execute_Command(commands comm, int background, int forkreq){
         globfree(&glob_result);
     }
     comm.args = args;
+
     //We check if the command is a builtin command
     if (command == "exit"){
         hist.saveHistory();
@@ -489,13 +670,38 @@ void Execute_Command(commands comm, int background, int forkreq){
     else if (command == "sb"){
         Execute_sb(comm);
     }
+    else if (command == "delep"){
+        Execute_delep(comm);
+    }
     else{
         int pid = 0;
         // if forkreq is 1, we fork the process i.e. run the command in a child process
-        if (forkreq) pid = fork();
+        if (forkreq) {
+            pid = fork();
+        }
         // we run the command in the child process
         if (pid == 0){
             // setting the input and output files in case of redirection
+            if (forkreq){
+                struct sigaction act_nothing;
+                act_nothing.sa_handler = &handler_nothing;
+                sigemptyset(&act_nothing.sa_mask);
+                act_nothing.sa_flags = SA_RESTART;
+
+                struct sigaction act_default;
+                act_default.sa_handler = SIG_DFL;
+                sigemptyset(&act_default.sa_mask);
+                act_default.sa_flags = SA_RESTART;
+
+                if (background){
+                    sigaction(SIGINT, &act_nothing, NULL);
+                    sigaction(SIGTSTP, &act_nothing, NULL);
+                }
+                else{
+                    sigaction(SIGINT, &act_default, NULL);
+                    sigaction(SIGTSTP, &act_nothing, NULL);
+                }
+            }
             if (comm.input_file != ""){
                 int fd = open(comm.input_file.c_str(), O_RDONLY);
                 if (fd == -1){
@@ -525,11 +731,38 @@ void Execute_Command(commands comm, int background, int forkreq){
                 perror("Error in executing command.");
                 exit(1);
             }
+            if (forkreq && !background){
+                exit(0);
+            }
         }
         else if (pid > 0){
             // if the command is not to be run in the background, we wait for the child to finish
             if (!background){
-                waitpid(pid, NULL, 0);
+                struct sigaction act_tstp;
+                act_tstp.sa_handler = &handler_sigtstp;
+                sigemptyset(&act_tstp.sa_mask);
+                act_tstp.sa_flags = SA_RESTART;
+                sigaction(SIGTSTP, &act_tstp, NULL);
+                // wait for the current child
+                int status;
+                // if ctrl z is pressed we dont wait for the child to finish
+                if (waitpid(pid, &status, WUNTRACED) == -1){
+                    perror("Error in waitpid");
+                }
+            }
+            else{
+                struct sigaction sig_shell_int;
+                sig_shell_int.sa_handler = &handler_sigint;
+                sig_shell_int.sa_flags = SA_RESTART;
+                sigemptyset(&sig_shell_int.sa_mask);
+                sigaction(SIGINT, &sig_shell_int, NULL);
+            
+                struct sigaction sig_shell_tstp;
+                sig_shell_tstp.sa_handler = &handler_sigtstp;
+                sig_shell_tstp.sa_flags = SA_RESTART;
+                sigemptyset(&sig_shell_tstp.sa_mask);
+                sigaction(SIGTSTP, &sig_shell_tstp, NULL);
+                waitpid(pid, NULL, WNOHANG);
             }
         }
         // error in forking
@@ -539,8 +772,6 @@ void Execute_Command(commands comm, int background, int forkreq){
         }
     }
 }
-
-sigjmp_buf env;
 
 void Shell(){
     char *cwd = (char *)NULL;
@@ -657,9 +888,33 @@ void Shell(){
                         close(pipes[j][1]);
                     }
                     // executing the command
+                    struct sigaction act_nothing;
+                    act_nothing.sa_handler = &handler_nothing;
+                    sigemptyset(&act_nothing.sa_mask);
+                    act_nothing.sa_flags = SA_RESTART;
+
+                    struct sigaction act_default;
+                    act_default.sa_handler = SIG_DFL;
+                    sigemptyset(&act_default.sa_mask);
+                    act_default.sa_flags = SA_RESTART;
+
+                    if (background){
+                        sigaction(SIGINT, &act_nothing, NULL);
+                        sigaction(SIGTSTP, &act_nothing, NULL);
+                    }
+                    else{
+                        sigaction(SIGINT, &act_default, NULL);
+                        sigaction(SIGTSTP, &act_nothing, NULL);
+                    }
                     Execute_Command(new_procs[i], background, 0);
                 }
                 else if (pid > 0){
+                    struct sigaction act_sigtstp;
+                    act_sigtstp.sa_handler = &handler_sigtstp;
+                    sigemptyset(&act_sigtstp.sa_mask);
+                    act_sigtstp.sa_flags = SA_RESTART;
+                    sigaction(SIGTSTP, &act_sigtstp, NULL);
+
                     if (i != 0) {
                         close(pipes[i - 1][0]);
                     }
@@ -667,7 +922,11 @@ void Shell(){
                         close(pipes[i][1]);
                     }
                     if (!background){
-                        waitpid(pid, NULL, 0);
+                        int status;
+                        waitpid(pid, &status, WUNTRACED);
+                    }
+                    else{
+                        waitpid(pid, NULL, WNOHANG);
                     }
                 }
                 else{
@@ -691,36 +950,20 @@ void Shell(){
     return ;
 }
 
-void handler_sigint(int signum){
-    // print a new line
-    printf("\n");
-    // jump to the shell prompt
-    siglongjmp(env, 1);
-    return;
-}
-
-
-// If the user presses "Ctrl - z" while a program is executing, the program
-// execution should move to the background and the shell prompt should
-// reappear.
-void handler_sigtstp(int signum){
-    // move the running process to the background
-    int pid = getpid();
-    printf("Process %d moved to the background.\n", pid);
-    raise(SIGSTOP);
-    return;
-}
-
 signed main(){
-    struct sigaction signalint;
-    signalint.sa_handler = &handler_sigint;
-    signalint.sa_flags = SA_RESTART;
-    sigaction(SIGINT, &signalint, NULL);
-
-    struct sigaction signaltstp;
-    signaltstp.sa_handler = &handler_sigtstp;
-    signaltstp.sa_flags = SA_RESTART;
-    sigaction(SIGTSTP, &signaltstp, NULL);
+    // the shell will ignore the sigint signal
+    struct sigaction sig_shell_int;
+    sig_shell_int.sa_handler = &handler_sigint;
+    sig_shell_int.sa_flags = SA_RESTART;
+    sigemptyset(&sig_shell_int.sa_mask);
+    sigaction(SIGINT, &sig_shell_int, NULL);
+   
+    // the shell will have a default action for sigtstp
+    struct sigaction sig_shell_tstp;
+    sig_shell_tstp.sa_handler = &handler_sigtstp;
+    sig_shell_tstp.sa_flags = SA_RESTART;
+    sigemptyset(&sig_shell_tstp.sa_mask);
+    sigaction(SIGTSTP, &sig_shell_tstp, NULL);
 
     rl_bind_keyseq("\\e[A", goUpInHistory);
     rl_bind_keyseq("\\e[B", goDownInHistory);
