@@ -244,11 +244,12 @@ void Execute_cd(commands comm){
 }
 
 void Execute_sb(commands comm){
-    int sug_flag = 0;
+    int sug_flag = 0,pid_flag=1;
     vector<int> ancestors;
 
     if (comm.args.size() == 0){
         cout<<"No arguments given. Give PID of process."<<endl;
+        return;
     }
     else{
         for(int i = 0; i < comm.args.size(); i++){
@@ -256,24 +257,33 @@ void Execute_sb(commands comm){
                 sug_flag = 1;
                 continue;
             }
+            else
+                pid_flag--;
+            if(pid_flag <0)
+                continue;
             int pid = atoi(comm.args[i].c_str());
             if (pid == 0){
                 cout<<"Invalid PID."<<endl;
-                continue;
+                return;
             }
             //print ancestors of pid
-            
+            ancestors.push_back(pid);
             int parent =pid;
-            cout<<"Ancestors of "<<pid<<" are: ";
+            cout<<"Ancestor chain: "<<pid<<" ";
             while(parent!=1)
             {
                 // open "/proc/<pid>/stat"
                 string proc_stat_path = "/proc/"+to_string(parent)+"/stat";
                 FILE *fh = fopen(proc_stat_path.c_str(), "r");
                 if (fh == NULL) {
-                fprintf(stderr, "Failed opening %s: ", proc_stat_path.c_str());
-                perror("");
-                return;
+                    if(parent==0)
+                    {
+                        cout<<"1";
+                        parent=1;
+                        continue;
+                    }
+                    cout<<"Invalid PID."<<endl;
+                    return;
                 }
 
                 //get parent value from fourth field
@@ -301,8 +311,18 @@ void Execute_sb(commands comm){
             cout<<endl;
         }
     }
+    if(pid_flag == 1)
+    {
+        cout<<"No PID given. Give PID of process."<<endl;
+        return;
+    }
     if(sug_flag == 1){
         //suggest malware among ancestors
+
+        if(ancestors.size() <=2){
+            cout<<"Suggested Malware PID: "<<ancestors[0]<<endl;
+            return;
+        }
 
         //remove init and scheduler process from ancestors (part of our heuristic)
         ancestors.pop_back();
@@ -327,11 +347,12 @@ void Execute_sb(commands comm){
                 int pid = q.front();
                 q.pop();
 
+                if(pid==0)
+                    continue;
+
                 string proc_stat_path = "/proc/"+to_string(pid)+"/task"+"/"+to_string(pid)+"/children";
                 FILE *fh = fopen(proc_stat_path.c_str(), "r");
                 if (fh == NULL) {
-                    fprintf(stderr, "Failed opening %s: ", proc_stat_path.c_str());
-                    perror("");
                     continue;
                 }
                 char *line = NULL;
@@ -345,7 +366,8 @@ void Execute_sb(commands comm){
                         child_count_non_recursive[i]++;
                         direct_children.push_back(atoi(pch));
                     }
-                    q.push(atoi(pch));
+                    if(atoi(pch)!=0)
+                        q.push(atoi(pch));
 
                     pch = strtok(NULL, " ");
                 }
@@ -355,11 +377,11 @@ void Execute_sb(commands comm){
             //find time spent in direct children and grandchildren
             for(int j=0;j<direct_children.size();j++)
             {
+                if(direct_children[j]==0)
+                    continue;
                 string proc_stat_path = "/proc/"+to_string(direct_children[j])+"/stat";
                 FILE *fh = fopen(proc_stat_path.c_str(), "r");
                 if (fh == NULL) {
-                    fprintf(stderr, "Failed opening %s: ", proc_stat_path.c_str());
-                    perror("");
                     continue;
                 }
                 char *line = NULL;
@@ -382,27 +404,26 @@ void Execute_sb(commands comm){
                 string proc_stat_path1 = "/proc/"+to_string(direct_children[j])+"/task"+"/"+to_string(direct_children[j])+"/children";
                 FILE *fh1 = fopen(proc_stat_path1.c_str(), "r");
                 if (fh1 == NULL) {
-                    fprintf(stderr, "Failed opening %s: ", proc_stat_path1.c_str());
-                    perror("");
-                    exit(1);
+                    continue;
                 }
                 char *line1 = NULL;
                 size_t len1 = 0;
                 getline(&line1, &len1, fh1);
                 char *pch1 = strtok(line1, " ");
                 while(pch1 != NULL){
-                    grand_children.push_back(atoi(pch1));
+                    if(atoi(pch)!=0)
+                        grand_children.push_back(atoi(pch1));
                     pch1 = strtok(NULL, " ");
                 }
                 fclose(fh1);
 
                 for(int k=0;k<grand_children.size();k++)
                 {
+                    if(grand_children[k]==0)
+                        continue;
                     string proc_stat_path2 = "/proc/"+to_string(grand_children[k])+"/stat";
                     FILE *fh2 = fopen(proc_stat_path2.c_str(), "r");
                     if (fh2 == NULL) {
-                        fprintf(stderr, "Failed opening %s: ", proc_stat_path2.c_str());
-                        perror("");
                         continue;
                     }
                     char *line2 = NULL;
@@ -424,7 +445,7 @@ void Execute_sb(commands comm){
             }
 
             // cout<<"Number of direct child processes, total children processes of "<<ancestors[i]<<" are: "<<child_count_non_recursive[i]<<","<<child_count[i]<<endl;
-            cout<<"Time spent in direct children and grandchildren of "<<ancestors[i]<<" is: "<<time_sum[i]<<endl;
+            // cout<<"Time spent in direct children and grandchildren of "<<ancestors[i]<<" is: "<<time_sum[i]<<endl;
             if(time_sum[i]<min_time)
             {
                 min_time = time_sum[i];
