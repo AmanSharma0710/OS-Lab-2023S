@@ -22,13 +22,12 @@ void run_dijstra(vector<vector<int>> &edges, int n, int m, int start, int end){
     // We run dijstra's algorithm on the graph
     // We store the shortest path from start to every other node in the array dist
     vector<int> dist(n, INT_MAX);
-    vector<int> order(0);
-    for(int i=start; i<end; i++) dist[i] = 0;
+    vector<int> parent(n, -1);
+    for(int i=start; i<=end; i++) dist[i] = 0;
     priority_queue<pair<int, int>, vector<pair<int, int>>, greater<pair<int, int>>> pq;
-    for(int i=start; i<end; i++){
+    for(int i=start; i<=end; i++){
         pq.push(make_pair(0, i));
-        order.push_back(i);
-    } 
+    }
     while(!pq.empty()){
         pair<int, int> p = pq.top();
         pq.pop();
@@ -39,8 +38,8 @@ void run_dijstra(vector<vector<int>> &edges, int n, int m, int start, int end){
             int v = edges[u][i];
             if(dist[v] > dist[u] + 1){
                 dist[v] = dist[u] + 1;
+                parent[v] = u;
                 pq.push(make_pair(dist[v], v));
-                order.push_back(v);
             }
         }
     }
@@ -50,10 +49,23 @@ void run_dijstra(vector<vector<int>> &edges, int n, int m, int start, int end){
         perror("fopen");
         exit(1);
     }
-    for(int i=0; i<order.size(); i++){
-        fprintf(fp, "%d ", order[i]);
+    for(int i=0; i<n; i++){
+        if(dist[i] == INT_MAX) continue;
+        if((i >= start) && (i <= end)) continue;
+        fprintf(fp, "%d: ", i);
+        int u = i;
+        vector<int> path(0);
+        while(u != -1){
+            path.push_back(u);
+            u = parent[u];
+        }
+        for(int j=path.size()-1; j>=0; j--){
+            fprintf(fp, "%d", path[j]);
+            if(j != 0) fprintf(fp, "->");
+        }
+        fprintf(fp, "\n");
     }
-    fprintf(fp, "\n");
+    fprintf(fp, "------------------------------------------------------------------------------------------\n");
     fclose(fp);
     return;
 }
@@ -150,9 +162,9 @@ int main(int argc, char *argv[]){
         int start = (consumer_number*n)/10;
         int end = ((consumer_number+1)*n)/10;
         if(consumer_number == 9){
-            end = n;
+            end = n-1;
         }
-        else consumer_number--;
+        else end--;
         // Now we call the algorithm
         if(optimised) run_optimised(edges, n, m, start, end);
         else run_dijstra(edges, n, m, start, end);
