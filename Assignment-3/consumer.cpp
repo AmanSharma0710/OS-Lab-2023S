@@ -249,15 +249,9 @@ int main(int argc, char *argv[]){
         if(argc == 3){
             optimised = true;
         }
-        //Compute the time taken by the algorithm
-        auto start_time = high_resolution_clock::now();
         // Now we call the algorithm
         if(optimised) run_optimised(edges, n, m, new_nodes);
         else run_dijstra(edges, n, m);
-        auto stop_time = high_resolution_clock::now();
-        auto duration = duration_cast<microseconds>(stop_time - start_time);
-        // We print the time taken by the algorithm
-        if(consumer_number == 0) cout << "Time taken by the algorithm: " << duration.count() << " microseconds" << endl;
         edges.clear();
     }
     // Detach from the shared memory and exit
