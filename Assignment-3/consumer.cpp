@@ -16,17 +16,27 @@
 #include <sys/stat.h>
 using namespace std;
 
-string filename = "./output/consumer_";
+#include<chrono>
+using namespace std::chrono;
 
-void run_dijstra(vector<vector<int>> &edges, int n, int m, int start, int end){
+string filename = "./output/consumer_";
+int N;
+set<int> source_nodes;
+set<int> new_source_nodes;
+vector<int> distances_global;
+vector<int> parent_global;
+
+void run_dijstra(vector<vector<int>> &edges, int n, int m){
     // We run dijstra's algorithm on the graph
     // We store the shortest path from start to every other node in the array dist
     vector<int> dist(n, INT_MAX);
     vector<int> parent(n, -1);
-    for(int i=start; i<=end; i++) dist[i] = 0;
+    for(auto it: source_nodes){
+        dist[it] = 0;
+    }
     priority_queue<pair<int, int>, vector<pair<int, int>>, greater<pair<int, int>>> pq;
-    for(int i=start; i<=end; i++){
-        pq.push(make_pair(0, i));
+    for(auto it: source_nodes){
+        pq.push(make_pair(dist[it], it));
     }
     while(!pq.empty()){
         pair<int, int> p = pq.top();
@@ -50,9 +60,15 @@ void run_dijstra(vector<vector<int>> &edges, int n, int m, int start, int end){
         exit(1);
     }
     for(int i=0; i<n; i++){
-        if(dist[i] == INT_MAX) continue;
-        if((i >= start) && (i <= end)) continue;
         fprintf(fp, "%d: ", i);
+        if(dist[i] == INT_MAX){
+            fprintf(fp, "No path found\n");
+            continue;
+        }
+        if(source_nodes.find(i) != source_nodes.end()){
+            fprintf(fp, "Source node\n");
+            continue;
+        }
         int u = i;
         vector<int> path(0);
         while(u != -1){
@@ -70,31 +86,57 @@ void run_dijstra(vector<vector<int>> &edges, int n, int m, int start, int end){
     return;
 }
 
-void run_optimised(vector<vector<int>> &edges, int n, int m, int start, int end){   //TODO: Implement this function
-    cout<<"Optimised"<<endl;
-    // We run the optimised algorithm on the graph
-    // We store the shortest path from start to every other node in the array dist
+void run_optimised(vector<vector<int>> &edges, int n, int m, int new_nodes){
+    // Add the new nodes to the graph, i.e., for all the new added nodes, distance is min global_distance to all neighbours+1
+    for(int i=n-new_nodes; i<n; i++){
+        int min_dist = INT_MAX, parent_curr = -1;
+        for(int j=0; j<edges[i].size(); j++){
+            int v = edges[i][j];
+            if(v>=n-new_nodes) continue;
+            if(distances_global[v] < min_dist){
+                min_dist = distances_global[v];
+                parent_curr = v;
+            }
+        }
+        if(min_dist == INT_MAX) continue;
+        distances_global[i] = min_dist + 1;
+        parent_global[i] = parent_curr;
+    }
+
+    // We run dijstra's algorithm on the graph using only the newly added nodes as the source nodes
     vector<int> dist(n, INT_MAX);
-    vector<int> order(0);
-    for(int i=start; i<end; i++) dist[i] = 0;
+    vector<int> parent(n, -1);
+    for(auto it: source_nodes){ // change to source_nodes
+        dist[it] = 0;
+    }
     priority_queue<pair<int, int>, vector<pair<int, int>>, greater<pair<int, int>>> pq;
-    for(int i=start; i<end; i++){
-        pq.push(make_pair(0, i));
-        order.push_back(i);
-    } 
+    vector<bool> shorter_path_found(n, false);
+    for(auto it: new_source_nodes){
+        pq.push(make_pair(dist[it], it));
+        shorter_path_found[it] = true;
+    }
     while(!pq.empty()){
         pair<int, int> p = pq.top();
         pq.pop();
         int u = p.second;
         int w = p.first;
         if(w > dist[u]) continue;
+        if(w > distances_global[u]) continue;   //This is the optimisation
         for(int i=0; i<edges[u].size(); i++){
             int v = edges[u][i];
-            if(dist[v] > dist[u] + 1){
+            if((dist[v] > dist[u] + 1) && (dist[u]+1 < distances_global[v])){   //This is the optimisation
                 dist[v] = dist[u] + 1;
+                parent[v] = u;
+                shorter_path_found[v] = true;
                 pq.push(make_pair(dist[v], v));
-                order.push_back(v);
             }
+        }
+    }
+    // We update the parents for the nodes which have a shorter path
+    for(int i=0; i<n; i++){
+        if(shorter_path_found[i]){
+            parent_global[i] = parent[i];
+            distances_global[i] = dist[i];
         }
     }
     // We write the shortest path from start to every other node to the file
@@ -103,10 +145,29 @@ void run_optimised(vector<vector<int>> &edges, int n, int m, int start, int end)
         perror("fopen");
         exit(1);
     }
-    for(int i=0; i<order.size(); i++){
-        fprintf(fp, "%d ", order[i]);
+    for(int i=0; i<n; i++){
+        fprintf(fp, "%d dist=%d path: ", i, distances_global[i]);
+        if(distances_global[i] == INT_MAX){
+            fprintf(fp, "No path found\n");
+            continue;
+        }
+        if(source_nodes.find(i) != source_nodes.end()){
+            fprintf(fp, "Source node\n");
+            continue;
+        }
+        int u = i;
+        vector<int> path(0);
+        while(u != -1){
+            path.push_back(u);
+            u = parent_global[u];
+        }
+        for(int j=path.size()-1; j>=0; j--){
+            fprintf(fp, "%d", path[j]);
+            if(j != 0) fprintf(fp, "->");
+        }
+        fprintf(fp, "\n");
     }
-    fprintf(fp, "\n");
+    fprintf(fp, "------------------------------------------------------------------------------------------\n");
     fclose(fp);
     return;
 }
@@ -136,9 +197,17 @@ int main(int argc, char *argv[]){
     // Add the consumer number to the filename
     filename += argv[1];
     filename += ".txt";
+    int consumer_number = atoi(argv[1]);
+
+    //Initialise global variables
+    N = 0;
+    source_nodes.clear();
+    distances_global.clear();
+    parent_global.clear();
     while(1){
         // We sleep for 30 seconds
         sleep(30);
+        new_source_nodes.clear();
         int n, m;
         // We read the current graph from the shared memory
         // We read the number of vertices and edges from the shared memory
@@ -152,22 +221,43 @@ int main(int argc, char *argv[]){
             edges[shm_int[2*i+3]].push_back(shm_int[2*i+2]);
         }
         // first argument passed is the number of consumer
-        // If we are the ith consumer, we take the nodes from i*n/10 to ((i+1)*n/10)-1 of the graph
-        int consumer_number = atoi(argv[1]);
+        int new_nodes = n - N;
+        // If we are the ith consumer, we add 1/10th of the new nodes to the source nodes
+        // We add nodes from i*n/10 to ((i+1)*n/10)-1 to the source nodes
+        int start = (consumer_number*new_nodes)/10;
+        int end = ((consumer_number+1)*new_nodes)/10;
+        if(consumer_number == 9){
+            end = new_nodes-1;
+        }
+        else end--;
+
+        for(int i=start; i<=end; i++){
+            source_nodes.insert(N+i);
+            new_source_nodes.insert(N+i);
+        }
+        // For all the new nodes, add the distance from the source nodes as INT_MAX
+        for(int i=N; i<n; i++){
+            distances_global.push_back(INT_MAX);
+            parent_global.push_back(-1);
+        }
+
+        // Update the value of N
+        N = n;
+
         // If 2 arguments are passed, then we call the optimised version of the algorithm
         bool optimised = false;
         if(argc == 3){
             optimised = true;
         }
-        int start = (consumer_number*n)/10;
-        int end = ((consumer_number+1)*n)/10;
-        if(consumer_number == 9){
-            end = n-1;
-        }
-        else end--;
+        //Compute the time taken by the algorithm
+        auto start_time = high_resolution_clock::now();
         // Now we call the algorithm
-        if(optimised) run_optimised(edges, n, m, start, end);
-        else run_dijstra(edges, n, m, start, end);
+        if(optimised) run_optimised(edges, n, m, new_nodes);
+        else run_dijstra(edges, n, m);
+        auto stop_time = high_resolution_clock::now();
+        auto duration = duration_cast<microseconds>(stop_time - start_time);
+        // We print the time taken by the algorithm
+        if(consumer_number == 0) cout << "Time taken by the algorithm: " << duration.count() << " microseconds" << endl;
         edges.clear();
     }
     // Detach from the shared memory and exit

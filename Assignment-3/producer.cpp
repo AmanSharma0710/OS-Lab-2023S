@@ -50,6 +50,7 @@ int main(){
         srand(time(NULL));
         int new_vertices = rand()%21 + 10;
         // For every new vertex, we add edges to existing vertices with probability proportional to their degree
+        // So when sampling vertices to connect to the new vertex, we need to sample from all the vertices with the probability proportional to their degree independently
         vector<int> all_ends;
         for(int j=0; j<edges.size(); j++){
             all_ends.push_back(edges[j].first);
@@ -58,6 +59,9 @@ int main(){
         for(int i=0; i<new_vertices; i++){
             int new_vertex = n+i;
             int new_edges = rand()%20 + 1;
+            if(new_edges > n){
+                new_edges = n;
+            }
             // Randomly sample vertices from all_ends until we have new_edges vertices to connect to the new vertex
             set<int> sampled;
             while(sampled.size() < new_edges){
