@@ -146,7 +146,7 @@ void run_optimised(vector<vector<int>> &edges, int n, int m, int new_nodes){
         exit(1);
     }
     for(int i=0; i<n; i++){
-        fprintf(fp, "%d dist=%d path: ", i, distances_global[i]);
+        fprintf(fp, "%d: ", i, distances_global[i]);
         if(distances_global[i] == INT_MAX){
             fprintf(fp, "No path found\n");
             continue;
