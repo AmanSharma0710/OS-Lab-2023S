@@ -1,0 +1,33 @@
+1. Data Structures Used:
+    A. Action
+        a. user_id (int): The user id of the user who performed the action.
+        b. action_id (int): The action id of the action. (for each user, it is the nth action performed by the user)
+        c. action_type (int): The type of the action performed by the user. (Like, Comment or Post)
+        d. timestamp (time_t): The timestamp of the action performed by the user.
+    
+    B. Node
+        a. id (int): The id of the node.
+        b. neighbors (vector<int>): The list of neighbors of the node.
+        c. priority (int): to determine the ordering of the feed queue. It is set randomly at the beginning of the program as 0 or 1.
+        d. wallQueue (queue<Action>): The queue of actions performed on the node's wall. These are the actions performed by the user on his/her own wall.
+        e. feedQueue (vector<pair<int,Action>>): The queue of actions performed on the node's feed. The pair's first element is the user_id of the action. This helps in determining the priority of the action in the feed queue.
+        f. numLikes (int): The number of like actions performed by the user.
+        g. numComments (int): The number of comment actions performed by the user.
+        h. numPosts (int): The number of post actions performed by the user.
+
+    numLikes, numComments and numPosts are used to determine the action_id of the next action performed by the user.
+
+2. Locks Used: 
+
+3. Functions Used:
+    A. ComputeCommonNeighbors: This function computes the common neighbors of two nodes. It stores the result in a 2D matrix commonNeighbors. The commonNeighbors[i][j] stores the number of common neighbors of node i and node j. This function is called only once at the beginning of the program.
+    B. ReadGraph: This function reads the graph from the input file and stores it in the graph vector. This function is called only once at the beginning of the program by the main thread. The graph is stored in the form of an adjacency list.
+    C. PushToFeedQueue: This function pushed the action to the feed queue of all the neighbors of the node. This function takes in as arguments the action and user_id of the node. 
+    D. ReorderFeedQueue: This function reorders the feed queue of the node. This function takes in as arguments the user_id of the node and the actions are sorted based on the priority set. It is called by the readPost threads whenever they are beginning reading a node's feed queue.
+    E. userSimulatorFn, readPostFn, pushUpdateFn: These are all thread functions which work as explained in the problem statement.
+
+4. Global variables: 
+    A. nodes (vector<Node>): This vector stores the nodes of the graph. The nodes are stored in the form of an adjacency list.
+    B. commonNeighbors (int[][]): This 2D matrix stores the number of common neighbors of two nodes. The commonNeighbors[i][j] stores the number of common neighbors of node i and node j.
+    C. changedFeedQueues (set<int>): This set stores the user_ids of the nodes whose feed queues have been changed. This set is used by the readPost thread to determine the nodes whose posts need to be read.
+    D. actionQueue (queue<Action>): This queue is shared by the userSimulator thread and the pushUpdate thread. The userSimulator thread pushes the actions to this queue and the pushUpdate thread pops the actions from this queue.
