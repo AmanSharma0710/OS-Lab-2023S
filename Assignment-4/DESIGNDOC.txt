@@ -18,6 +18,9 @@
     numLikes, numComments and numPosts are used to determine the action_id of the next action performed by the user.
 
 2. Locks Used: 
+    A. readPostMutex: Whenever we are accessing a user from the changedFeedQueues set, we acquire this lock. This lock is also acquired when we are accessing the feedQueue of a node. This ensures multiple threads do not access the same node at the same time.
+    B. pushUpdateMutex: Whenever we are accessing the actionQueue, we acquire this lock. This ensures multiple threads do not access the actionQueue at the same time.
+    C. printMutex: Whenever we are printing the output, we acquire this lock. This ensures multiple threads do not print the output at the same time. This keeps the log file in the correct order.
 
 3. Functions Used:
     A. ComputeCommonNeighbors: This function computes the common neighbors of two nodes. It stores the result in a 2D matrix commonNeighbors. The commonNeighbors[i][j] stores the number of common neighbors of node i and node j. This function is called only once at the beginning of the program.

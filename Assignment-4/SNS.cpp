@@ -13,6 +13,8 @@
 
 #define NNODES 37700
 
+// compile using g++ SNS.cpp -o sns -lpthread -mcmodel=medium
+
 using namespace std;
 
 class Action{
@@ -132,9 +134,11 @@ void ReadGraph(){
 void PushToFeedQueue(Action act, int node_id, pthread_t thread_id){
     // this function will push the action to the feed queue of all the neighbors of the node
     // with id node_id
+    pthread_mutex_lock(&printMutex);
     FILE* fp = fopen("sns.log", "a");
+    fprintf(fp,"-------------------------------------------------------\n");
     fprintf(fp, "Thread %ld Pushing to Feed Queue the action:-\n", thread_id);
-    fprintf(fp, "User_id: %d Action_id: %d Action: %s Timestamp: %s", act.user_id, act.action_id, act.action_type.c_str(), ctime(&act.timestamp));
+    fprintf(fp, "User_id: %d Action_id: %d Action: %s Timestamp: %s\n", act.user_id, act.action_id, act.action_type.c_str(), ctime(&act.timestamp));
     for(int i=0; i<(int)nodes[node_id].neighbors.size(); i++){
         int neighbor_id = nodes[node_id].neighbors[i];
         nodes[neighbor_id].feedQueue.push_back(make_pair(node_id, act));
@@ -146,7 +150,9 @@ void PushToFeedQueue(Action act, int node_id, pthread_t thread_id){
         // so that it can reorder the feed queue of the node
         pthread_cond_signal(&readPostCond);
     }
+    fprintf(fp,"------------------------------------------------------\n");
     fclose(fp);
+    pthread_mutex_unlock(&printMutex);
 }
 
 void ReorderFeedQueue(int nodeid){
@@ -187,6 +193,7 @@ void *userSimulatorFn(void *arg){
     // and push them to a queue monitored by pushUpdate threads
     while(true){
         // We will also log these statements in sns.log file
+        pthread_mutex_lock(&printMutex);
         FILE* fp = fopen("sns.log", "a");
         cout<<"-------------------------------------------------------------------------"<<endl;
         // write this into the log file
@@ -236,6 +243,7 @@ void *userSimulatorFn(void *arg){
         cout<<"-------------------------------------------------------------------------"<<endl;
         fprintf(fp, "-------------------------------------------------------------------------\n");
         fclose(fp);
+        pthread_mutex_unlock(&printMutex);
         // sleep for 2 minutes;
         sleep(120);
     }    
@@ -255,13 +263,24 @@ void *readPostFn(void *arg){
         pthread_mutex_unlock(&readPostMutex);
         // read the feed queue of the node
         ReorderFeedQueue(node_id);
+        // write the feed queue to the log file
+        pthread_mutex_lock(&printMutex);
+        FILE* fp = fopen("sns.log", "a");
+        cout<<"-------------------------------------------------------------------------"<<endl;
+        fprintf(fp, "-------------------------------------------------------------------------\n");
+        cout<<"Read Post Thread Started: " << pthread_self()<<endl;
+        fprintf(fp, "Read Post Thread Started: %ld\n", pthread_self());
         for(int i=0;i<(int)nodes[node_id].feedQueue.size();i++){
             // read the action
-            Action action = nodes[node_id].feedQueue[i].second;
-            FILE* fp = fopen("sns.log", "a");
+            Action action = nodes[node_id].feedQueue[i].second;            
             fprintf(fp, "I have read Action: %d %s by user %d at %s from feed of user %d\n", action.action_id, action.action_type.c_str(), action.user_id, ctime(&action.timestamp), node_id);
-            fclose(fp);
         }
+        cout<<"Read Post Thread Finished: " << pthread_self()<<endl;
+        fprintf(fp, "Read Post Thread Finished: %ld\n", pthread_self());
+        cout<<"-------------------------------------------------------------------------"<<endl;
+        fprintf(fp, "-------------------------------------------------------------------------\n");
+        fclose(fp);
+        pthread_mutex_unlock(&printMutex);
         // clear the feed queue of the node
         nodes[node_id].feedQueue.clear();
     }
@@ -284,7 +303,7 @@ void *pushUpdateFn(void *arg){
         pthread_mutex_unlock(&pushUpdateMutex);
         // push the action to the feed queues of the neighbours
         PushToFeedQueue(action, action.user_id, pthread_self());
-    }
+        }
 
 }
 
@@ -296,6 +315,7 @@ int main(int argc, char *argv[]){
     pthread_mutex_init(&pushUpdateMutex, NULL);
     pthread_cond_init(&readPostCond, NULL);
     pthread_cond_init(&pushUpdateCond, NULL);
+    pthread_mutex_init(&printMutex, NULL);
 
     // The main thread will be responsible for reading the graph
     // it will then create a userSimulator thread
