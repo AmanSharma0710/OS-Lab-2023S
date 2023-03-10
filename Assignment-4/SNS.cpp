@@ -8,6 +8,7 @@
 #include<stack>
 #include<set>
 #include<time.h>
+#include<algorithm>
 #include<unistd.h>
 
 #define NNODES 37700
@@ -71,15 +72,15 @@ set<int> changedFeedQueues;
 // create a shared queue for userSimulator thread to push actions and pushUpdate threads to pop actions
 queue<Action> actionQueue;
 
-pthread_mutex_t ActionQueueMutex = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t ActionQueueMutex;
 
-pthread_mutex_t printMutex = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t printMutex;
 
-pthread_mutex_t pushUpdateMutex = PTHREAD_MUTEX_INITIALIZER;
-pthread_cond_t pushUpdateCond = PTHREAD_COND_INITIALIZER;
+pthread_mutex_t pushUpdateMutex;
+pthread_cond_t pushUpdateCond;
 
-pthread_mutex_t readPostMutex = PTHREAD_MUTEX_INITIALIZER;
-pthread_cond_t readPostCond = PTHREAD_COND_INITIALIZER;
+pthread_mutex_t readPostMutex;
+pthread_cond_t readPostCond;
 
 void ComputeCommonNeighbors(){
     // this function will compute the number of common neighbors of each pair of nodes
@@ -90,9 +91,9 @@ void ComputeCommonNeighbors(){
         }
     }
     for(int i=0; i<NNODES; i++){
-        for(int j=0; j<nodes[i].neighbors.size(); j++){
+        for(int j=0; j<(int)nodes[i].neighbors.size(); j++){
             int neighbor = nodes[i].neighbors[j];
-            for(int k=0; k<nodes[neighbor].neighbors.size(); k++){
+            for(int k=0; k<(int)nodes[neighbor].neighbors.size(); k++){
                 int neighbor_of_neighbor = nodes[neighbor].neighbors[k];
                 if (neighbor_of_neighbor != i){
                     commonNeighbors[i][neighbor_of_neighbor]++;
@@ -106,7 +107,6 @@ void ReadGraph(){
     int edges = 0;
     for(int i=0; i<NNODES; i++){
         nodes[i] = Node(i+1);
-        NodesMutex[i] = PTHREAD_MUTEX_INITIALIZER;
     }
     // read the nodes from the musae_git_edges.csv file
     // the first row contains the headers, ignore that
@@ -133,9 +133,9 @@ void PushToFeedQueue(Action act, int node_id, pthread_t thread_id){
     // this function will push the action to the feed queue of all the neighbors of the node
     // with id node_id
     FILE* fp = fopen("sns.log", "a");
-    fprintf(fp, "Thread %d Pushing to Feed Queue the action:-\n", thread_id);
+    fprintf(fp, "Thread %ld Pushing to Feed Queue the action:-\n", thread_id);
     fprintf(fp, "User_id: %d Action_id: %d Action: %s Timestamp: %s", act.user_id, act.action_id, act.action_type.c_str(), ctime(&act.timestamp));
-    for(int i=0; i<nodes[node_id].neighbors.size(); i++){
+    for(int i=0; i<(int)nodes[node_id].neighbors.size(); i++){
         int neighbor_id = nodes[node_id].neighbors[i];
         nodes[neighbor_id].feedQueue.push_back(make_pair(node_id, act));
         // write this into the log file
@@ -194,28 +194,32 @@ void *userSimulatorFn(void *arg){
         cout<<"User Simulator Thread Started: " << pthread_self()<<endl;
         fprintf(fp, "User Simulator Thread Started: %ld\n", pthread_self());
         // choose 100 random nodes from the graph
-        for(int i=0;i<100;i++){
+        // TODO: change this to 100
+        for(int i=0;i<5;i++){
             int node_id = rand() % NNODES + 1;
             fprintf(fp, "\nChosen Node: %d Neighbors: %d\n", node_id, (int)nodes[node_id].neighbors.size());
             int n = floor(log2(nodes[node_id].neighbors.size()));
-            n = 10(n+1);
+            n = 10*(n+1);
             fprintf(fp, "Number of actions to be generated: %d\n", n);
             for(int j=0;j<n;j++){
                 int action_no = rand() % 3;
                 int action_id;
                 string action_type;
-                if (action_no == 0)
+                if (action_no == 0){
                     action_type = "Post";
-                    numPosts++;
+                    nodes[node_id].numPosts++;
                     action_id = nodes[node_id].numPosts;
-                else if (action_no == 1)
+                }
+                else if (action_no == 1) {
                     action_type = "Comment";
-                    numComments++;
+                    nodes[node_id].numComments++;
                     action_id = nodes[node_id].numComments;
-                else
+                }
+                else{
                     action_type = "Like";
-                    numLikes++;
+                    nodes[node_id].numLikes++;
                     action_id = nodes[node_id].numLikes;
+                }
                 Action action(node_id, action_id, action_type, time(NULL));
                 fprintf(fp, "Action %d generated:\n", j);
                 fprintf(fp, "User_id: %d Action_id: %d Action: %s Timestamp: %s", node_id, action_id, action_type.c_str(), ctime(&action.timestamp));
@@ -224,7 +228,7 @@ void *userSimulatorFn(void *arg){
                 // push it to a queue monitored by pushUpdate threads
                 actionQueue.push(action);
                 // everytime an action is pushed into the actionQueue, we will wake up one of the pushUpdate threads
-                pthread_cond_signal(&cond);
+                pthread_cond_signal(&pushUpdateCond);
             }
         } 
         cout<<"\nUser Simulator Thread Finished: " << pthread_self()<<endl;
@@ -251,13 +255,15 @@ void *readPostFn(void *arg){
         pthread_mutex_unlock(&readPostMutex);
         // read the feed queue of the node
         ReorderFeedQueue(node_id);
-        for(int i=0;i<nodes[node_id].feedQueue.size();i++){
-            Action action = nodes[node_id].feedQueue.front();
-            nodes[node_id].feedQueue.pop();
+        for(int i=0;i<(int)nodes[node_id].feedQueue.size();i++){
+            // read the action
+            Action action = nodes[node_id].feedQueue[i].second;
             FILE* fp = fopen("sns.log", "a");
-            fprintf(fp, "I read action number %d of type %s posted by user %d at time %s from feed of user %d\n", action.action_id, action.action_type.c_str(), action.user_id, ctime(&action.timestamp), node_id);
+            fprintf(fp, "I have read Action: %d %s by user %d at %s from feed of user %d\n", action.action_id, action.action_type.c_str(), action.user_id, ctime(&action.timestamp), node_id);
             fclose(fp);
         }
+        // clear the feed queue of the node
+        nodes[node_id].feedQueue.clear();
     }
 }
 
@@ -285,6 +291,11 @@ void *pushUpdateFn(void *arg){
 int main(int argc, char *argv[]){
     // initializing the global variables
     changedFeedQueues.clear();
+    actionQueue = queue<Action>();
+    pthread_mutex_init(&readPostMutex, NULL);
+    pthread_mutex_init(&pushUpdateMutex, NULL);
+    pthread_cond_init(&readPostCond, NULL);
+    pthread_cond_init(&pushUpdateCond, NULL);
 
     // The main thread will be responsible for reading the graph
     // it will then create a userSimulator thread
@@ -295,7 +306,7 @@ int main(int argc, char *argv[]){
     pthread_t readPost[10];
     pthread_t pushUpdate[25];
 
-    ComputeCommonNeighbours();
+    ComputeCommonNeighbors();
 
     //create the userSimulator thread
     // we create an empty log file sns.log
