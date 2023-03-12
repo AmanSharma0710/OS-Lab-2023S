@@ -499,7 +499,7 @@ void Execute_delep(commands comm){
     int m_size = 102 * sizeof(int);
     int* shared_memory;
     const char* name = "Process_ID";
-    shm_fd = shm_open(name, O_RDWR | O_TRUNC, S_IRUSR | S_IWUSR | S_IXUSR);
+    shm_fd = shm_open(name, O_RDWR | O_CREAT, S_IRUSR | S_IWUSR | S_IXUSR);
     if (shm_fd < 0) {
         perror("Error in shm_open");
         return ;
