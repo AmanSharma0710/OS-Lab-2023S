@@ -1,4 +1,4 @@
-// todo: sleep times are currently divided by 10 for fast testing
+// todo: sleep times are currently divided by 5 for fast testing
 
 
 #include <iostream>
@@ -18,8 +18,8 @@ typedef struct room_t
     int curr_guest = 0;
     int curr_stay_time = 0;
     time_t curr_stay_start = 0;
-    int total_occupants = 0;
-    int occupied_time = 0;
+    int total_occupants = 0; //total number of guests who have stayed in the room since last cleaning
+    int occupied_time = 0; //total time room occupied since last cleaning
 } room;
 
 int x, y, n;
@@ -28,10 +28,11 @@ int *guest_priority;
 int *guest_removed_status;
 int total_guests_curr = 0;
 
-int rooms_with_2_occupants = 0;
-int allotment_possible=1;
+int rooms_with_2_occupants = 0; //used to trigger cleaning mode
+int allotment_possible=1; //not in cleaning mode
 
-sem_t *room_access;
+sem_t *room_access; //ability to access room's data
+sem_t *room_busy; //room is being stayed in or being cleaned, hence busy
 sem_t *guest_removed_status_access;
 sem_t total_guests_curr_access;
 sem_t rooms_with_2_occupants_access;
@@ -44,14 +45,14 @@ void* guest_thread_fn(void *arg)
     while(1)
     {
         int rand_time = rand() % 10 + 10;
-        sleep(rand_time);
+        sleep(rand_time/5);
 
         int* temp= (int*)arg;
         int id = *temp;
         int stay_time = rand() % 20 + 10;
         int room_allocated = -1;
 
-        //if guest is removed from the hotel, it will try to complete previous stay time
+        //if guest is removed from the hotel, it will try to complete previous stay time first in the next iterations
         sem_wait(&guest_removed_status_access[id]);
         if(guest_removed_status[id] != 0)
         {
@@ -112,13 +113,14 @@ void* guest_thread_fn(void *arg)
                 sem_wait(&room_access[i]);
                 if (rooms[i].occupied == 1)
                 {
-                    sem_post(&room_access[i]);
                     if (guest_priority[rooms[i].curr_guest] < min_priority)
                     {
                         min_priority = guest_priority[rooms[i].curr_guest];
                         min_priority_room = i;
                     }
+                    
                 }
+                sem_post(&room_access[i]);
             }
             if (min_priority_room != -1)
             {
@@ -128,14 +130,15 @@ void* guest_thread_fn(void *arg)
                     sem_wait(&room_access[min_priority_room]);
                     sem_wait(&guest_removed_status_access[rooms[min_priority_room].curr_guest]);
                     guest_removed_status[rooms[min_priority_room].curr_guest] = rooms[min_priority_room].curr_stay_time - (curr_time - rooms[min_priority_room].curr_stay_start);
+                    sem_wait(&print_access);
+                    cout << "Guest " << rooms[min_priority_room].curr_guest << " is removed from room " << min_priority_room << " after stay for " << (curr_time - rooms[min_priority_room].curr_stay_start) << " seconds." << endl;
+                    sem_post(&print_access);
                     sem_post(&guest_removed_status_access[rooms[min_priority_room].curr_guest]);
 
                     rooms[min_priority_room].curr_guest = id;
                     rooms[min_priority_room].curr_stay_time = stay_time;
                     rooms[min_priority_room].curr_stay_start = time(NULL);
-                    sem_wait(&total_guests_curr_access);
-                    total_guests_curr++;
-                    sem_post(&total_guests_curr_access);
+
                     rooms[min_priority_room].total_occupants++;
                     sem_wait(&print_access);
                     cout << "Guest " << id << " is staying in room " << min_priority_room << " for " << stay_time << " seconds." << endl;
@@ -156,13 +159,25 @@ void* guest_thread_fn(void *arg)
         }
         if(room_allocated!=-1)
         {
-            sleep(stay_time);
+            sem_wait(&room_busy[room_allocated]);
+            sleep(stay_time/5);
+            
+            sem_wait(&guest_removed_status_access[id]);
+            if(guest_removed_status[id]!=0)
+            {
+                sem_post(&guest_removed_status_access[id]);
+                sem_post(&room_busy[room_allocated]);
+                continue;
+            }
+            sem_post(&guest_removed_status_access[id]);
             sem_wait(&print_access);
             cout << "Guest " << id << " has completed stay in room " << room_allocated<<"." << endl;
             sem_post(&print_access);
+            sem_post(&room_busy[room_allocated]);
             sem_wait(&room_access[room_allocated]);
-            if(rooms[room_allocated].total_occupants==2)
+            if(rooms[room_allocated].total_occupants>=2)
             {
+                sem_post(&room_access[room_allocated]);
                 sem_wait(&rooms_with_2_occupants_access);
                 rooms_with_2_occupants++;
                 if(rooms_with_2_occupants>=n)
@@ -171,16 +186,25 @@ void* guest_thread_fn(void *arg)
                     {
                         sem_post(&cleaning_mode);                        
                     }
-                    // sem_post(&cleaning_mode);
+
                     rooms_with_2_occupants=0;
                     sem_wait(&allotment_possible_access);
                     allotment_possible=-1*n + 1;
                     sem_post(&allotment_possible_access);
+                    sem_wait(&total_guests_curr_access);
+                    total_guests_curr=0;
+                    sem_post(&total_guests_curr_access);
                 }
                 sem_post(&rooms_with_2_occupants_access);
             }
+            else
+            {
+                sem_post(&room_access[room_allocated]);
+            }
+            sem_wait(&room_access[room_allocated]);
             rooms[room_allocated].occupied = 0;
             sem_post(&room_access[room_allocated]);
+
             sem_wait(&total_guests_curr_access);
             total_guests_curr--;
             sem_post(&total_guests_curr_access);
@@ -195,25 +219,35 @@ void* cleaning_staff_thread_fn(void *arg)
         sem_wait(&cleaning_mode);
         int* temp= (int*)arg;
         int id = *temp;
-        
+        int flag=0;
+
         for(int i=0;i<n;i++)
         {
             sem_wait(&room_access[i]);
             if(rooms[i].total_occupants>=2)
             {
+                sem_wait(&room_busy[i]);
                 sem_wait(&print_access);
                 cout<<"Cleaning staff "<<id<<" is cleaning room "<<i<<"."<<endl;
-                sem_wait(&print_access);
-                sleep(rooms[i].occupied_time);
+                sem_post(&print_access);
                 rooms[i].total_occupants=0;
+                auto wait = rooms[i].occupied_time;
                 rooms[i].occupied_time=0;
+                sem_post(&room_access[i]);
+                sleep(wait/5);
+                sem_post(&room_busy[i]);
                 sem_wait(&print_access);
                 cout<<"Cleaning staff "<<id<<" has cleaned room "<<i<<"."<<endl;
+                flag=1;
                 sem_post(&print_access);
-                sem_post(&room_access[i]);
+                
                 break;
             }
             sem_post(&room_access[i]);
+        }
+        if(flag==0)
+        {
+            sem_post(&cleaning_mode);
         }
 
         sem_wait(&allotment_possible_access);
@@ -256,6 +290,12 @@ int main()
     for(int i=0;i<n;i++)
     {
         sem_init(&room_access[i],0,1);
+    }
+
+    room_busy = new sem_t[n];
+    for(int i=0;i<n;i++)
+    {
+        sem_init(&room_busy[i],0,1);
     }
 
     guest_removed_status_access = new sem_t[y];
