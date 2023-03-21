@@ -1,5 +1,3 @@
-TODO: Needs to be converted to pdf file for final submission
-
 1. Data Structures Used:
     i. Room
         Each room is represented as a strcture with the following fields:
@@ -7,7 +5,7 @@ TODO: Needs to be converted to pdf file for final submission
             b. curr_guest (int): stores the id of the guest currently occupying the room (0 when there is no guest)
             c. curr_stay_time (int): time the current guest stays in the room
             d. curr_stay_start (time_t): start time of current guest occupying the room 
-            e. total_occupants (int): number of occupants in the room 
+            e. total_occupants (int): number of occupants in the room since the last time the room was cleaned
             f. occupied_time (int): total time the room has been occupied by guests since the last time the room was cleaned 
 
 2. Global Variables Used:

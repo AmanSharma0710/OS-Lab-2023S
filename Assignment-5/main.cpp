@@ -1,6 +1,5 @@
 // todo: sleep times are currently divided by 5 for fast testing
 
-
 #include <iostream>
 #include <pthread.h>
 #include <unistd.h>
@@ -219,6 +218,7 @@ void* cleaning_staff_thread_fn(void *arg)
         sem_wait(&cleaning_mode);
         int* temp= (int*)arg;
         int id = *temp;
+        // flag is used to check if any room was cleaned or not
         int flag=0;
 
         for(int i=0;i<n;i++)
@@ -230,10 +230,24 @@ void* cleaning_staff_thread_fn(void *arg)
                 sem_wait(&print_access);
                 cout<<"Cleaning staff "<<id<<" is cleaning room "<<i<<"."<<endl;
                 sem_post(&print_access);
+                rooms[i].occupied=0;
+                rooms[i].curr_guest=0;
+                rooms[i].curr_stay_start=0;
+                rooms[i].curr_stay_time=0;
+
                 rooms[i].total_occupants=0;
                 auto wait = rooms[i].occupied_time;
                 rooms[i].occupied_time=0;
                 sem_post(&room_access[i]);
+
+                sem_wait(&rooms_with_2_occupants_access);
+                rooms_with_2_occupants=0;
+                sem_post(&rooms_with_2_occupants_access);
+
+                sem_wait(&total_guests_curr_access);
+                total_guests_curr=0;
+                sem_post(&total_guests_curr_access);
+
                 sleep(wait/5);
                 sem_post(&room_busy[i]);
                 sem_wait(&print_access);
@@ -285,6 +299,14 @@ int main()
     {
         guest_priority[temp_priority[i].second] = i + 1;
     }
+
+    // print the priority of the guests
+    cout << "Guest priority: ";
+    for (int i = 0; i < y; i++)
+    {
+        cout << guest_priority[i] << " ";
+    }
+    cout << endl;
 
     room_access = new sem_t[n];
     for(int i=0;i<n;i++)
