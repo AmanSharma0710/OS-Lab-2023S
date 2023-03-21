@@ -34,6 +34,10 @@ void* guest_thread_fn(void *arg)
 
         //if guest is removed from the hotel, it will try to complete previous stay time first in the next iterations
         sem_wait(&guest_removed_status_access[id]);
+        if(guest_removed_status[id] < 0)
+        {
+            guest_removed_status[id]=0;
+        }
         if(guest_removed_status[id] != 0)
         {
             stay_time = guest_removed_status[id];
