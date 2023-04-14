@@ -58,7 +58,10 @@ int getVal(string, int);
 */
 int freeList(string);      //Renamed the function called freeElem to freeList because it is more descriptive of what the function does
 
-// Additional function that can be called to free up the big block of memory allocated
+/* 
+    Additional function that can be called to free up the big block of memory allocated
+    @return number of memory blocks freed
+*/
 int freeMemory();
 
 /*

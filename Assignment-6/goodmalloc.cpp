@@ -110,6 +110,7 @@ void endScope(){
         node += pageTable->getOffset(temp[i]);
         while(node->next != NULL){
             node->free = true;
+            nodesInMemory--;
             node = node->next;
         }
         pageTable->table.erase(temp[i]);

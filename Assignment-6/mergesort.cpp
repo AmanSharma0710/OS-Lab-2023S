@@ -44,7 +44,8 @@ List* mergeSort(List* list, int level){
             rightNode = rightNode->next;
         }
     }
-    // comment below for without freeList
+    // comment all 3 lines below for without freeList
+    // We also free the local variables in the endScope function as well so all 3 need to be commented out
     freeList(leftName);
     freeList(rightName);
     endScope();
