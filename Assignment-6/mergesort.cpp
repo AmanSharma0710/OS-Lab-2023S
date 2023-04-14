@@ -62,7 +62,7 @@ int main(){
     list = mergeSort(list, 0);
     // list->print();
     endScope();
-    freeMemory();
+    int nodesInMemory = freeMemory();
     int who = RUSAGE_SELF;
     struct rusage usage;
     int ret = getrusage(who, &usage);
@@ -79,9 +79,12 @@ int main(){
     fp = fopen("time.txt", "a");
     fprintf(fp, "%lf\n", tot_time);
     fclose(fp);
-    return 0;
+    fp = fopen("nodes.txt", "a");
+    fprintf(fp, "%d\n", nodesInMemory);
+    fclose(fp);
+    // return 0;
     // uncomment below for without freeList
-    // FILE *fp = fopen("mem_without.txt", "a");
+    // fp = fopen("mem_without.txt", "a");
     // fprintf(fp, "%lf\n", mem_usage);
     // fclose(fp);
     // fp = fopen("time_without.txt", "a");

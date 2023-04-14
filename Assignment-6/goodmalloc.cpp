@@ -206,6 +206,7 @@ int freeList(string name){
         node += pageTable->getOffset(name);
         while(node->next != NULL){
             node->free = true;
+            nodesInMemory--;
             node = node->next;
         }
         //Remove the entry from the page table
@@ -234,6 +235,7 @@ int freeMemory(){
     pthread_mutex_lock(&printMutex);
     cout << "freeMemory(): Called to free all memory. Resetting all page table entries..." << endl;
     pthread_mutex_unlock(&printMutex);
+    int ret_val = nodesInMemory;
     if(BIG_MEMORY_BLOCK != NULL){
         //Reset the page table
         while(!pageTable->table.empty()){
@@ -249,7 +251,7 @@ int freeMemory(){
         pthread_mutex_lock(&printMutex);
         cout << "freeMemory(): Freed all memory." << endl;
         pthread_mutex_unlock(&printMutex);
-        return 0;
+        return ret_val;
     }
     //The memory has already been freed
     pthread_mutex_lock(&printMutex);
