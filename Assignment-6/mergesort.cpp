@@ -2,7 +2,7 @@
 #include <iostream>
 #include <string>
 #include <random>
-
+#include <sys/resource.h>
 using namespace std;
 #define LENGTH 50000
 
@@ -44,6 +44,7 @@ List* mergeSort(List* list, int level){
             rightNode = rightNode->next;
         }
     }
+    // comment below for without freeList
     freeList(leftName);
     freeList(rightName);
     endScope();
@@ -62,7 +63,30 @@ int main(){
     // list->print();
     endScope();
     freeMemory();
+    int who = RUSAGE_SELF;
+    struct rusage usage;
+    int ret = getrusage(who, &usage);
+    if (ret == -1) {
+        cout << "Error in getrusage" << endl;
+        return -1;
+    }
+    double mem_usage = usage.ru_maxrss / 1024.0;
+    struct timeval time = usage.ru_utime;
+    double tot_time = time.tv_sec + (time.tv_usec / 1000000.0);
+    FILE *fp = fopen("mem.txt", "a");
+    fprintf(fp, "%lf\n", mem_usage);
+    fclose(fp);
+    fp = fopen("time.txt", "a");
+    fprintf(fp, "%lf\n", tot_time);
+    fclose(fp);
     return 0;
+    // uncomment below for without freeList
+    // FILE *fp = fopen("mem_without.txt", "a");
+    // fprintf(fp, "%lf\n", mem_usage);
+    // fclose(fp);
+    // fp = fopen("time_without.txt", "a");
+    // fprintf(fp, "%lf\n", tot_time);
+    // fclose(fp);
+    // return 0;
 }
 
-// TODO: Print debug messages in all functions, add print mutex
